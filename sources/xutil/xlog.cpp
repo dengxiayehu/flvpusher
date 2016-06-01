@@ -121,7 +121,7 @@ int log_print(const char *curfile, const int lineno, const log_level lvl,
                 color_level[lvl],
                 time_buf,
                 tid_buf,
-                curfile, lineno,
+                STR(basename_(curfile)), lineno,
                 lvl_name[lvl]);
 
         va_list ap;
