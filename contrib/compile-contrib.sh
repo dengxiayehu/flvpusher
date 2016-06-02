@@ -17,6 +17,7 @@ function exit_msg() {
 TARS_HDLR_ARR=(
 "zlib-1.2.8.tar.gz:compile_zlib"
 "openssl-1.0.2g.tar.gz:compile_openssl"
+"curl-7.49.1.tar.gz:compile_curl"
 "librtmp.tar.bz2:compile_librtmp"
 )
 
@@ -35,6 +36,13 @@ function compile_openssl() {
     ./Configure linux-x86_64 -fPIC threads zlib no-shared --prefix="$INSTALL_DIR" --with-zlib-lib="$INSTALL_DIR/lib" --with-zlib-include="$INSTALL_DIR/include" &&
         make depend &&
         make &&
+        make install && return 0
+    return 1
+}
+
+function compile_curl() {
+    ./configure --prefix="$INSTALL_DIR" --enable-static --enable-shared=no --disable-ldap --disable-ldaps --with-zlib="$INSTALL_DIR" --with-ssl="$INSTALL_DIR" &&
+        make $MKFLAGS &&
         make install && return 0
     return 1
 }
