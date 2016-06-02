@@ -91,50 +91,6 @@ void App::ask2quit()
         m_hls->ask2quit();
 }
 
-int App::load_cfg(const char *cfg_file)
-{
-    /* NOTE: config file's format:
-     * RTMPSRV_IP=127.0.0.1
-     * RTMPSRV_PORT=1935 */
-
-    FILE *fp = fopen(cfg_file, "r");
-    if (!fp) return -1; // It's ok if cfg file not exists
-
-    LOGI("Loading cfg file \"%s\" ..", cfg_file);
-
-    std::string ip;
-    uint16_t port = 1935;
-
-    char buf[MaxLine];
-    while (fgets(buf, sizeof(buf), fp)) {
-        // Ignore buf starts with '#'
-        if ('#' == buf[0]) continue;
-
-        // Remove trailing '\n' if exists
-        int len = strlen(buf);
-        if (buf[len - 1] == '\n')
-            buf[len - 1] = '\0';
-
-        std::vector<std::string> vpart(split(buf, "="));
-        if (vpart[0] == "RTMPSRV_IP")
-            ip = vpart[1];
-        else if (vpart[0] == "RTMPSRV_PORT")
-            port = atoi(STR(vpart[1]));
-    }
-
-    // To see whether error occurred
-    if (ferror(fp)) {
-        LOGE("Parse cfg file \"%s\" failed: %s (cont)",
-             cfg_file, ERRNOMSG);
-    }
-
-    // Make liveurl
-    m_liveurl = sprintf_("rtmp://%s:%u/live/va%d", STR(ip), port, getpid());
-
-    fclose(fp);
-    return 0;
-}
-
 int App::parse_arg(int argc, char *argv[])
 {
     struct option longopts[] = {
@@ -250,7 +206,7 @@ int App::check_arg() const
 {
     if (m_req_tspath.empty()) {
         if (m_input_str.empty()) {
-            LOGE("No input file specified");
+            LOGE("No input url specified");
             return -1;
         }
 
@@ -290,12 +246,6 @@ int App::prepare()
 
 int App::main(int argc, char *argv[])
 {
-    // Load config file from exe's dir
-    if (load_cfg(STR(sprintf_("%s/%s",
-                              STR(dirname_(argv[0])), CFG_FILE))) < 0) {
-        // Fall through
-    }
-
     if (parse_arg(argc, argv) < 0 ||
         check_arg() < 0) {
         usage();

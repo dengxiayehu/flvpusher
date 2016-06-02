@@ -86,7 +86,7 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     m_info.basenm = buf;
     END
     
-    if (!valid_m3u8(m_hls_playlist)) {
+    if (!valid_vod_m3u8(m_hls_playlist)) {
         if (!loop) {
             if (create_m3u8() < 0) {
                 LOGE("Create m3u8 file \"%s\" failed", STR(m_hls_playlist));

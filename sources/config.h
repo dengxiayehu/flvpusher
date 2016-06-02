@@ -7,8 +7,6 @@
 
 #define LOG_DIR                 "/tmp/"
 
-#define CFG_FILE                "flvpusher_cfg.txt"
-
 #define SOCK_TIMEOUT            30 // seconds
 #define RTMP_LOGLEVEL           RTMP_LOGDEBUG
 #define RTMP_DEF_BUFTIME        (10*60*60*1000) // 10 hours default
