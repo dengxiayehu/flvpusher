@@ -9,7 +9,7 @@
 #include "rtmp_handler.h"
 #include "config.h"
 
-#define XDEBUG
+//#define XDEBUG
 
 using namespace xutil;
 

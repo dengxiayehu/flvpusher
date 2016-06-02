@@ -118,7 +118,7 @@ int RtmpHandler::disconnect()
     RTMPContext *rt = &m_rt;
     if (rt->rtmp) {
         if (RTMP_IsConnected(rt->rtmp)) {
-            LOGI("Try to disconnect from rtmp server.. (url: %s)",
+            LOGI("Disconnect from rtmp server (url: %s)",
                     m_url.c_str());
         }
 

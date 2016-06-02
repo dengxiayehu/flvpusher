@@ -255,7 +255,7 @@ int App::check_arg() const
         }
 
         if ((m_liveurl.empty() && m_hls_playlist.empty()) ||
-                (!m_liveurl.empty() && !m_hls_playlist.empty())) {
+            (!m_liveurl.empty() && !m_hls_playlist.empty())) {
             LOGE("'--hls_playlist' and '-L' can't be both set or empty");
             return -1;
         }
@@ -274,7 +274,7 @@ int App::check_arg() const
 
 void App::usage() const
 {
-    fprintf(stderr, "Usage: flvpusher <-i flv_file> [-L liveurl] [--hls_playlist filename] [--hls_time time] [--hls_list_size size] [-h] [--loop] [-l log_level] [-a dump_audio] [-v dump_video] [-s tspath] [-c request-tspath] [--no_logfile] [-f flvpath]\n");
+    fprintf(stderr, "Usage: flvpusher <-i media_file> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]|[-c request-tspath]> [-h] [-l log_level|--no_logfile]\n");
     fprintf(stderr, "Version: %d\n", VERSION);
 }
 
@@ -292,7 +292,7 @@ int App::main(int argc, char *argv[])
 {
     // Load config file from exe's dir
     if (load_cfg(STR(sprintf_("%s/%s",
-                        STR(dirname_(argv[0])), CFG_FILE))) < 0) {
+                              STR(dirname_(argv[0])), CFG_FILE))) < 0) {
         // Fall through
     }
 

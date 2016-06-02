@@ -7,8 +7,6 @@
 #include "rtmp_handler.h"
 #include "tag_streamer.h"
 
-#define XDEBUG
-
 using namespace xutil;
 using namespace xmedia;
 
@@ -57,9 +55,6 @@ int FLVPusher::loop()
 
         int32_t timestamp =
             (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
-#ifdef XDEBUG
-        LOGI("TIMESTAMP: %d", timestamp);
-#endif
         // Need to sleep a while to meet the timestamp of media data
         if (timestamp > prev_ts) {
             int32_t adjust_tm = get_time_now() - tm_start - prev_ts;

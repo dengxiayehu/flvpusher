@@ -2462,9 +2462,8 @@ int MediaSession::play_subsessions(RtspClient *rtsp_client)
         return -1;
     } else {
         rtsp_client->duration() = play_end_time() - play_start_time();
-        rtsp_client->request_play(*this);
+        return rtsp_client->request_play(*this);
     }
-    return 0;
 }
 
 char *MediaSession::abs_start_time() const
