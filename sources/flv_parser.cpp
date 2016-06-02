@@ -394,7 +394,7 @@ int FLVParser::free_video_tag_dat(FLVVideoTagData &vdat)
             SAFE_DELETE_ARRAY(vdat.pkt.avc_dcr.sps);
             SAFE_DELETE_ARRAY(vdat.pkt.avc_dcr.pps);
         } else if (vdat.pkt.pkt_typ == NALU) {
-            foreach(*vdat.pkt.nalu.dat, it) {
+            FOR_VECTOR_ITERATOR(NaluItem *, *vdat.pkt.nalu.dat, it) {
                 SAFE_DELETE_ARRAY((*it)->second);
                 SAFE_DELETE(*it);
             }

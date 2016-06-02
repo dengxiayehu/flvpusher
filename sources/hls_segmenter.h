@@ -14,7 +14,7 @@ class MP4Parser;
 class HLSSegmenter {
 public:
     HLSSegmenter(const std::string &hls_playlist,
-            const int hls_time, const int hls_list_size);
+                 const int hls_time, const int hls_list_size);
     ~HLSSegmenter();
 
     int set_file(const std::string &media_file, bool loop);
@@ -47,7 +47,6 @@ private:
     int create_m3u8(bool create_ts = false);
     int create_segment(uint32_t idx);
     const std::string get_seek_filename() const;
-    const std::string get_lock_filename() const;
 
 private:
     std::string m_hls_playlist; // Convert to abs path if needed

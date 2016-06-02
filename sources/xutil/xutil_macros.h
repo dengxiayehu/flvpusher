@@ -70,16 +70,16 @@
 
 #define foreach(container,it) \
     for (typeof((container).begin()) it = (container).begin(); \
-            it != (container).end(); \
-            ++it)
+         it != (container).end(); \
+         ++it)
 
-#define FOR_VECTOR_ITERATOR(e,v,i) for(vector<e>::iterator i=(v).begin();i!=(v).end();i++)
-#define FOR_VECTOR_CONST_ITERATOR(e,v,i) for(vector<e>::const_iterator i=(v).begin();i!=(v).end();i++)
-#define FOR_MAP(m,k,v,i) for(map<k , v>::iterator i=(m).begin();i!=(m).end();i++)
-#define FOR_MAP_CONST(m,k,v,i) for(map<k , v>::const_iterator i=(m).begin();i!=(m).end();i++)
+#define FOR_VECTOR_ITERATOR(e,v,i) for(std::vector<e>::iterator i=(v).begin();i!=(v).end();i++)
+#define FOR_VECTOR_CONST_ITERATOR(e,v,i) for(std::vector<e>::const_iterator i=(v).begin();i!=(v).end();i++)
+#define FOR_MAP(m,k,v,i) for(std::map<k , v>::iterator i=(m).begin();i!=(m).end();i++)
+#define FOR_MAP_CONST(m,k,v,i) for(std::map<k , v>::const_iterator i=(m).begin();i!=(m).end();i++)
 #define MAP_KEY(i) ((i)->first)
 #define MAP_VAL(i) ((i)->second)
-#define FOR_SET(e,s,i) for(set<e>::iterator i=(s).begin();i!=(s).end();i++)
+#define FOR_SET(e,s,i) for(std::set<e>::iterator i=(s).begin();i!=(s).end();i++)
 
 #define FATAL(fmt, ...) do {                \
     fprintf(stderr, fmt, ##__VA_ARGS__);    \
@@ -114,9 +114,9 @@
 
 #define REVERSE_BYTES(bytes_arr, n)   do { \
     for (uint32_t idx = 0; idx < n/2; ++idx) { \
-        byte tmp = *bytes_arr[idx]; \
-        *bytes_arr[idx] = *bytes_arr[n - idx - 1]; \
-        *bytes_arr[n - idx - 1] = tmp; \
+         byte tmp = *bytes_arr[idx]; \
+         *bytes_arr[idx] = *bytes_arr[n - idx - 1]; \
+         *bytes_arr[n - idx - 1] = tmp; \
     } \
 } while (0)
 

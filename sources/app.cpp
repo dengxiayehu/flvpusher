@@ -58,12 +58,12 @@ App::~App()
 int App::init()
 {
     if (m_sig_hdl->install(sighandler,
-                SIGINT, Signaler::SIGLIST_END) != SUCCESS) {
+                           SIGINT, Signaler::SIGLIST_END) != SUCCESS) {
         LOGE("Install SIGINT's handler failed");
         return -1;
     }
     if (m_sig_hdl->install(SIG_IGN,
-                SIGPIPE, Signaler::SIGLIST_END) != SUCCESS) {
+                           SIGPIPE, Signaler::SIGLIST_END) != SUCCESS) {
         LOGE("Install SIGPIPE's handler failed");
         return -1;
     }
@@ -125,12 +125,11 @@ int App::load_cfg(const char *cfg_file)
     // To see whether error occurred
     if (ferror(fp)) {
         LOGE("Parse cfg file \"%s\" failed: %s (cont)",
-                cfg_file, ERRNOMSG);
+             cfg_file, ERRNOMSG);
     }
 
     // Make liveurl
-    m_liveurl = sprintf_("rtmp://%s:%u/live/va%d",
-            STR(ip), port, getpid());
+    m_liveurl = sprintf_("rtmp://%s:%u/live/va%d", STR(ip), port, getpid());
 
     fclose(fp);
     return 0;
@@ -238,7 +237,8 @@ int App::parse_arg(int argc, char *argv[])
     }
 
     if (!no_logfile) {
-        if (xlog::log_add_dst(STR(sprintf_("%s/flvpusher_log_%d.txt", LOG_DIR, getpid()))) != SUCCESS) {
+        if (xlog::log_add_dst(STR(sprintf_("%s/flvpusher_log_%d.txt",
+                                           LOG_DIR, getpid()))) != SUCCESS) {
             fprintf(stderr, "Init xlog system failed\n");
             return -1;
         }
@@ -264,7 +264,7 @@ int App::check_arg() const
     if (!m_hls_playlist.empty()) {
         if (m_hls_time < 0 || m_hls_list_size < 0) {
             LOGE("Invalid value of hls_time(%d) or hls_list_size(%d)",
-                    m_hls_time, m_hls_list_size);
+                 m_hls_time, m_hls_list_size);
             return -1;
         }
     }
@@ -310,8 +310,7 @@ int App::main(int argc, char *argv[])
 
     if (!m_hls_playlist.empty()) {
         if (!end_with(m_hls_playlist, ".m3u8")) {
-            LOGE("Not a valid m3u8 file \"%s\"",
-                    STR(m_hls_playlist));
+            LOGE("Not a valid m3u8 file \"%s\"", STR(m_hls_playlist));
             return -1;
         }
 
@@ -322,9 +321,7 @@ int App::main(int argc, char *argv[])
                 );
         int ret = m_hls->set_file(input[0], m_loop);
         if (ret < 0)
-            return -1;
-        else if (ret > 0)
-            return 0;
+            return ret;
         return m_loop ? m_hls->loop() : 0;
     }
 
@@ -348,7 +345,7 @@ int App::main(int argc, char *argv[])
                 m_pusher = new TSPusher(*it, m_rtmp_hdl);
             } else {
                 LOGE("Media file \"%s\" not supported (ignored)",
-                        STR(*it));
+                     STR(*it));
                 continue;
             }
 

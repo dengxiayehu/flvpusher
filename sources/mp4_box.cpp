@@ -299,7 +299,7 @@ int FileTypeBox::init(File *f)
     printf("major_brand: 0x%08x, minor_brand: 0x%08x\n",
             major_brand, minor_brand);
     printf("compatible_brands: ");
-    foreach(compatible_brands, it) {
+    FOR_VECTOR_ITERATOR(uint32_t, compatible_brands, it) {
         printf("0x%08x ", *it);
     }
     printf("\n");

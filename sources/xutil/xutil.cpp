@@ -192,7 +192,7 @@ out:
     if (orig_hdl != SIG_ERR) {
         if (signal(SIGCHLD, orig_hdl) == SIG_ERR) {
             LOGE("restore SIGCHLD after popen failed: %s",
-                    ERRNOMSG);
+                 ERRNOMSG);
             ret = false;
         }
     }
@@ -204,10 +204,9 @@ std::string uuid()
 {
     char buff[128];
 
-    CHECK_EXPR_EXEC_RETVAL(
-            !exec_get_str("uuidgen -t", buff, sizeof(buff)),
-            LOGE("try to generate uuid failed"),
-            sprintf_("%d", rand()));
+    CHECK_EXPR_EXEC_RETVAL(!exec_get_str("uuidgen -t", buff, sizeof(buff)),
+                           LOGE("try to generate uuid failed"),
+                           sprintf_("%d", rand()));
 
     return std::string(buff);
 }
@@ -215,28 +214,24 @@ std::string uuid()
 std::string to_upper_str(const char *str)
 {
     CHECK_EXPR_EXEC_RETVAL(!str,
-            LOGE("Null parm passed"),
-            std::string("NULL"));
+                           LOGE("Null parm passed"),
+                           std::string("NULL"));
 
     std::string s(str);
-    foreach(s, it) {
-        *it = toupper(*it);
-    }
-
+    for (std::string::size_type i = 0; i < s.size(); ++i)
+        s[i] = toupper(s[i]);
     return s;
 }
 
 std::string to_lower_str(const char *str)
 {
     CHECK_EXPR_EXEC_RETVAL(!str,
-            LOGE("Null parm passed"),
-            std::string("NULL"));
+                           LOGE("Null parm passed"),
+                           std::string("NULL"));
 
     std::string s(str);
-    foreach(s, it) {
-        *it = tolower(*it);
-    }
-
+    for (std::string::size_type i = 0; i < s.size(); ++i)
+        s[i] = tolower(s[i]);
     return s;
 }
 
@@ -251,10 +246,10 @@ std::string time_label()
         char time_buf[128];
         struct tm *ptm = localtime(&tv.tv_sec);
         snprintf(time_buf, sizeof(time_buf),
-                "%04d-%02d-%02d-%02d:%02d:%02d.%03ld ",
-                ptm->tm_year + 1900, ptm->tm_mon + 1, ptm->tm_mday,
-                ptm->tm_hour, ptm->tm_min, ptm->tm_sec,
-                tv.tv_usec/1000);
+                 "%04d-%02d-%02d-%02d:%02d:%02d.%03ld ",
+                 ptm->tm_year + 1900, ptm->tm_mon + 1, ptm->tm_mday,
+                 ptm->tm_hour, ptm->tm_min, ptm->tm_sec,
+                 tv.tv_usec/1000);
         return time_buf;
     }
 }
@@ -464,7 +459,7 @@ Mutex::Mutex(MutexType typ)
 {
     pthread_mutexattr_init(&m_attr);
     pthread_mutexattr_settype(&m_attr,
-            typ == NORMAL ? PTHREAD_MUTEX_NORMAL : PTHREAD_MUTEX_RECURSIVE);
+                              typ == NORMAL ? PTHREAD_MUTEX_NORMAL : PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&m_mutex, &m_attr);
 }
 
@@ -479,7 +474,7 @@ Condition::Condition(Mutex &m, ConditionType typ) :
 {
     pthread_condattr_init(&m_cond_attr);
     pthread_condattr_setpshared(&m_cond_attr,
-            typ == PRIVATE ? PTHREAD_PROCESS_PRIVATE : PTHREAD_PROCESS_SHARED);
+                                typ == PRIVATE ? PTHREAD_PROCESS_PRIVATE : PTHREAD_PROCESS_SHARED);
     pthread_cond_init(&m_cond, &m_cond_attr);
 }
 
@@ -534,7 +529,7 @@ status_t Signaler::install(sighandler_t hdl, ...)
         sighandler_t sighdl = ::signal(signo, hdl);
         if (SIG_ERR == sighdl) {
             LOGE("signal for %s(%d) failed: %s",
-                    sys_siglist[signo], signo, ERRNOMSG);
+                 sys_siglist[signo], signo, ERRNOMSG);
             return ERR_SYS;
         } else {
             m_signo_hdl_map[signo] = sighdl;
@@ -546,10 +541,10 @@ status_t Signaler::install(sighandler_t hdl, ...)
 
 Signaler::~Signaler()
 {
-    foreach(m_signo_hdl_map, it) {
+    FOR_MAP(m_signo_hdl_map, int, sighandler_t, it) {
         if (SIG_ERR == ::signal(it->first, it->second)) {
             LOGE("restore signal for %s(%d) failed: %s",
-                    sys_siglist[it->first], it->first, ERRNOMSG);
+                 sys_siglist[it->first], it->first, ERRNOMSG);
             continue;
         }
 
@@ -635,7 +630,7 @@ void *MemHolder::alloc(uint32_t sz)
         void *tmp = malloc(m_capacity);
         if (!tmp) {
             LOGE("MemHolder malloc for size(%u) failed: %s",
-                    m_capacity, ERRNOMSG);
+                 m_capacity, ERRNOMSG);
 
             destroy();
             return NULL;
@@ -685,7 +680,7 @@ void IOBuffer::initialize(uint32_t expected)
 {
     if (buffer || size || published || consumed) {
         LOGE("Invalid IOBuffer state(%p,%u,%u,%u)",
-                buffer, size, published, consumed);
+             buffer, size, published, consumed);
         return;
     }
 

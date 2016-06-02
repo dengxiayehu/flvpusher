@@ -33,7 +33,7 @@ HLSSegmenter::HLSInfo::HLSInfo()
 /////////////////////////////////////////////////////////////
 
 HLSSegmenter::HLSSegmenter(const string &hls_playlist,
-        const int hls_time, const int hls_list_size) :
+                           const int hls_time, const int hls_list_size) :
     m_hls_playlist(hls_playlist),
     m_hls_time(hls_time),
     m_hls_list_size(hls_list_size),
@@ -57,25 +57,7 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     if (!is_dir(dir))
         system_("mkdir -p \"%s\" 2>/dev/null", STR(dir));
 
-    string lock_filename(get_lock_filename());
     int ret = 0;
-
-    if (is_file(lock_filename)) {
-        string pid(File::read_content(lock_filename));
-        if (!pid.empty()) {
-            if (!kill(atoi(STR(pid)), 0)) {
-                return 1;
-            }
-        }
-    }
-
-    {
-    char buf[7];
-    if (File::flush_content(STR(lock_filename), (const uint8_t *) buf,
-                snprintf(buf, sizeof(buf)-1, "%ld", (long) getpid())) < 0)
-        return -1;
-    }
-
     if (end_with(filename, ".mp4")) {
         m_mf = MP4;
         u.mp4_parser = new MP4Parser;
@@ -87,12 +69,12 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
         u.mp4_parser->init_ffmpeg_context();
     } else {
         LOGE("Not support file:\"%s\" for hls-segmenter",
-                STR(filename));
+             STR(filename));
         ret = -1;
         goto out;
     }
     
-    {
+    BEGIN
     // va.m3u8 ==> va1.ts va2.ts .. va3.ts
     const char *pattern = "%d.ts";
     int basename_size = strlen(STR(m_hls_playlist)) + strlen(pattern) + 1;
@@ -102,7 +84,7 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     if (p) *p = '\0';
     strncat(buf, pattern, basename_size);
     m_info.basenm = buf;
-    }
+    END
     
     if (!valid_m3u8(m_hls_playlist)) {
         if (!loop) {
@@ -119,8 +101,6 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     }
 
 out:
-    if (!loop)
-        unlink(STR(get_lock_filename()));
     return ret;
 }
 
@@ -152,16 +132,16 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         if (create_ts) {
             tsmuxer = new TSMuxer;
             tsmuxer->set_file(filename,
-                    u.mp4_parser->get_vtime_base());
+                              u.mp4_parser->get_vtime_base());
         }
         memcpy(rs, u.mp4_parser->m_status, sizeof(rs));
         if (!m_seek_file.write_buffer((uint8_t *) rs, sizeof(rs))) {
             LOGE("Write seek file \"%s\" failed",
-                    m_seek_file.get_path());
+                 m_seek_file.get_path());
             return -1;
         }
-        while (!m_quit && !u.mp4_parser->mp4_read_packet(
-                    u.mp4_parser->m_mp4->stream, pkt)) {
+        while (!m_quit &&
+               !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
             if (info->start_pts == -1) {
                 info->start_pts = pkt->pts;
                 info->end_pts = pkt->pts;
@@ -173,15 +153,15 @@ int HLSSegmenter::create_m3u8(bool create_ts)
             if (is_video)
                 info->duration = (double) (pkt->pts-info->end_pts)*tb.num/tb.den;
             int64_t end_pts = m_hls_time * AV_TIME_BASE * info->number;
-            if (is_video && is_key && av_compare_ts(pkt->pts - info->start_pts, tb,
-                        end_pts, AV_TIME_BASE_Q) >= 0) {
+            if (is_video &&
+                is_key &&
+                av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
                 if (create_ts)
                     SAFE_DELETE(tsmuxer);
-                info->segments.push_back(
-                        (HLSSegment) {filename, info->duration});
+                info->segments.push_back((HLSSegment) {filename, info->duration});
                 if (!m_seek_file.write_buffer((uint8_t *) rs, sizeof(rs))) {
                     LOGE("Write seek file \"%s\" failed",
-                            m_seek_file.get_path());
+                         m_seek_file.get_path());
                     return -1;
                 }
 
@@ -193,8 +173,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                 filename = sprintf_(STR(info->basenm), info->sequence);
                 if (create_ts) {
                     tsmuxer = new TSMuxer;
-                    tsmuxer->set_file(filename,
-                            u.mp4_parser->get_vtime_base());
+                    tsmuxer->set_file(filename, u.mp4_parser->get_vtime_base());
                 }
             }
             if (create_ts)
@@ -204,8 +183,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         }
         if (create_ts)
             SAFE_DELETE(tsmuxer);
-        info->segments.push_back(
-                (HLSSegment) {filename, info->duration});
+        info->segments.push_back((HLSSegment) {filename, info->duration});
 
         int target_duration = 0;
         FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
@@ -215,19 +193,19 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         char buf[2048];
         int n;
         n = snprintf(buf, sizeof(buf)-1,
-                "#EXTM3U\n"
-                "#EXT-X-VERSION:3\n"
-                "#EXT-X-ALLOW-CACHE:NO\n"
-                "#EXT-X-TARGETDURATION:%d\n"
-                "#EXT-X-MEDIA-SEQUENCE:0\n",
-                target_duration);
+                     "#EXTM3U\n"
+                     "#EXT-X-VERSION:3\n"
+                     "#EXT-X-ALLOW-CACHE:NO\n"
+                     "#EXT-X-TARGETDURATION:%d\n"
+                     "#EXT-X-MEDIA-SEQUENCE:0\n",
+                     target_duration);
         m_pl_file.write_buffer((uint8_t *) buf, n);
         FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
             n = snprintf(buf, sizeof(buf)-1,
-                    "#EXTINF:%f,\n"
-                    "%s\n",
-                    it->duration,
-                    STR(basename_(it->filename)));
+                         "#EXTINF:%f,\n"
+                         "%s\n",
+                         it->duration,
+                         STR(basename_(it->filename)));
             m_pl_file.write_buffer((uint8_t *) buf, n);
         }
         n = snprintf(buf, sizeof(buf)-1, "#EXT-X-ENDLIST");
@@ -261,23 +239,23 @@ int HLSSegmenter::create_segment(uint32_t idx)
         return 0;
     }
     TSMuxer *tsmuxer = new TSMuxer;
-    tsmuxer->set_file(filename,
-            u.mp4_parser->get_vtime_base());
-    while (!m_quit && !u.mp4_parser->mp4_read_packet(
-                u.mp4_parser->m_mp4->stream, pkt)) {
+    tsmuxer->set_file(filename, u.mp4_parser->get_vtime_base());
+    while (!m_quit &&
+           !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
         if (info->start_pts == -1) {
             info->start_pts = pkt->pts;
             info->end_pts = pkt->pts;
         }
         bool is_video = !check_h264_startcode(pkt);
         bool is_key = !is_video ||
-            ((pkt->data[4]&0x1f) == 5 ||
-             (pkt->data[4]&0x1f) == 7);
+                      ((pkt->data[4]&0x1f) == 5 ||
+                       (pkt->data[4]&0x1f) == 7);
         if (is_video)
             info->duration = (double) (pkt->pts-info->end_pts)*tb.num/tb.den;
         int64_t end_pts = m_hls_time * AV_TIME_BASE * (idx + 1);
-        if (is_video && is_key && av_compare_ts(pkt->pts - info->start_pts, tb,
-                    end_pts, AV_TIME_BASE_Q) >= 0) {
+        if (is_video &&
+            is_key &&
+            av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
             SAFE_FREE(pkt->data);
             break;
         }
@@ -291,15 +269,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
 const std::string HLSSegmenter::get_seek_filename() const
 {
     return sprintf_("%s/%s.seek",
-            STR(dirname_(m_hls_playlist)),
-            STR(basename_(m_hls_playlist)));
-}
-
-const std::string HLSSegmenter::get_lock_filename() const
-{
-    return sprintf_("%s/%s",
-            STR(dirname_(m_hls_playlist)),
-            HLS_LOCK_FILENAME);
+                    STR(dirname_(m_hls_playlist)), STR(basename_(m_hls_playlist)));
 }
 
 }

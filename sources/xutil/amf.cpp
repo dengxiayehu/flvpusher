@@ -342,7 +342,7 @@ void free_amf_string(AMFString &amfstr)
 void free_amf_associate_array(AMFAssociateArray &amfasoarr)
 {
     if (amfasoarr.arr) {
-        foreach(*amfasoarr.arr, it) {
+        FOR_VECTOR_ITERATOR(ArrayItem *, *amfasoarr.arr, it) {
             SAFE_DELETE(*it);
         }
     }
@@ -352,7 +352,7 @@ void free_amf_associate_array(AMFAssociateArray &amfasoarr)
 void free_amf_typobj(AMFObject &amftypobj)
 {
     if (amftypobj.arr) {
-        foreach(*amftypobj.arr, it) {
+        FOR_VECTOR_ITERATOR(ArrayItem *, *amftypobj.arr, it) {
             SAFE_DELETE(*it);
         }
     }
@@ -362,7 +362,7 @@ void free_amf_typobj(AMFObject &amftypobj)
 void free_amf_arr(AMFArray &amfarr)
 {
     if (amfarr.arr) {
-        foreach(*amfarr.arr, it) {
+        FOR_VECTOR_ITERATOR(struct list_head *, *amfarr.arr, it) {
             free_amf_list(*it);
             SAFE_DELETE(*it);
         }
@@ -393,11 +393,11 @@ void print_amf_list(const char *indent, struct list_head *head)
         case AMF_TYPE_OBJECT:
             printf("%sTYPE_OBJECT {\n", indent);
             if (amfobj->amftypobj.arr) { // In case it NULL
-                foreach(*amfobj->amftypobj.arr, it) {
+                FOR_VECTOR_ITERATOR(ArrayItem *, *amfobj->amftypobj.arr, it) {
                     printf("%s%-24s : ", indent,
-                            (*it)->first->amfstr.str);
+                           (*it)->first->amfstr.str);
                     print_amf_list(sprintf_("%s\t", indent).c_str(),
-                            &(*it)->second);
+                                   &(*it)->second);
                 }
             }
             printf("%s}\n", indent);
@@ -406,11 +406,11 @@ void print_amf_list(const char *indent, struct list_head *head)
         case AMF_TYPE_ASSOCIATIVE_ARRAY:
             printf("%sASSOCIATE_ARRAY {\n", indent);
             if (amfobj->amfasoarr.arr) { // In case it NULL
-                foreach(*amfobj->amfasoarr.arr, it) {
+                FOR_VECTOR_ITERATOR(ArrayItem *, *amfobj->amfasoarr.arr, it) {
                     printf("%s%-24s : ", indent,
-                            (*it)->first->amfstr.str);
+                           (*it)->first->amfstr.str);
                     print_amf_list(sprintf_("%s\t", indent).c_str(),
-                            &(*it)->second);
+                                   &(*it)->second);
                 }
             }
             printf("%s}\n", indent);
@@ -419,7 +419,7 @@ void print_amf_list(const char *indent, struct list_head *head)
         case AMF_TYPE_ARRAY:
             printf("%sARRAY {\n", indent);
             if (amfobj->amfarr.arr) { // In case it NULL
-                foreach(*amfobj->amfarr.arr, it) {
+                FOR_VECTOR_ITERATOR(struct list_head *, *amfobj->amfarr.arr, it) {
                     print_amf_list(indent, *it);
                 }
             }
@@ -498,9 +498,9 @@ int put_amf_associate_array(byte *&p,
 
     if (amfasoarr.arr) {
         bool err = false;
-        foreach(*amfasoarr.arr, it) {
+        FOR_VECTOR_ITERATOR(ArrayItem *, *amfasoarr.arr, it) {
             put_amf_string_no_typ(p,
-                    (*it)->first->amfstr.str);
+                                  (*it)->first->amfstr.str);
             if (strm_amf_list(p, &(*it)->second) < 0) {
                 LOGE("strm amfobj for aso-array failed");
                 err = true;
@@ -526,9 +526,9 @@ int put_amf_typobj(byte *&p, const AMFObject &amftypobj)
 
     if (amftypobj.arr) {
         bool err = false;
-        foreach(*amftypobj.arr, it) {
+        FOR_VECTOR_ITERATOR(ArrayItem *, *amftypobj.arr, it) {
             put_amf_string_no_typ(p,
-                    (*it)->first->amfstr.str);
+                                  (*it)->first->amfstr.str);
             if (strm_amf_list(p, &(*it)->second) < 0) {
                 LOGE("strm amfobj for amftypobj failed");
                 err = true;
@@ -553,7 +553,7 @@ int put_amf_array(byte *&p, const AMFArray &amfarr)
     p = put_be32(p, amfarr.arr ? amfarr.arr->size() : 0);
 
     if (amfarr.arr) {
-        foreach(*amfarr.arr, it) {
+        FOR_VECTOR_ITERATOR(struct list_head *, *amfarr.arr, it) {
             if (strm_amf_list(p, *it) < 0) {
                 p = savep;
                 return -1;

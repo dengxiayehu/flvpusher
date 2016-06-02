@@ -65,7 +65,7 @@ int VideoTagStreamer::process(FLVParser::FLVTag &tag)
 
             /* First figure out how much space we need 
              * 4bytes for nalu_startcode */
-            foreach(*vdat.pkt.nalu.dat, it) {
+            FOR_VECTOR_ITERATOR(NaluItem *, *vdat.pkt.nalu.dat, it) {
                 m_strm_len += 4 + (*it)->first;
 
                 // To see whether this is a key frame
@@ -105,10 +105,10 @@ int VideoTagStreamer::process(FLVParser::FLVTag &tag)
                 offset = 4 + m_sps_len + 4 + m_pps_len;
             }
 
-            foreach(*vdat.pkt.nalu.dat, it) {
+            FOR_VECTOR_ITERATOR(NaluItem *, *vdat.pkt.nalu.dat, it) {
                 // Add nalu_startcode
                 memcpy(dat+offset,
-                        nalu_startcode, sizeof(nalu_startcode));
+                       nalu_startcode, sizeof(nalu_startcode));
                 offset += 4;
 
                 // Nalu data followed
@@ -156,8 +156,7 @@ int AudioTagStreamer::process(FLVParser::FLVTag &tag)
             m_strm_len = 7 + adat.aac.dat.length;
             byte *dat = (byte *) m_mem_holder.alloc(m_strm_len);
             // Generate adts header
-            if (generate_adts_header(m_asc,
-                        adat.aac.dat.length, dat) < 0) {
+            if (generate_adts_header(m_asc, adat.aac.dat.length, dat) < 0) {
                 m_strm_len = 0;
                 return -1;
             }

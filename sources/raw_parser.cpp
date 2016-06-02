@@ -33,7 +33,7 @@ VideoRawParser::~VideoRawParser()
 
 void VideoRawParser::reset()
 {
-    foreach(m_nalus, it) {
+    FOR_VECTOR_ITERATOR(NaluItem *, m_nalus, it) {
         SAFE_DELETE(*it);
     }
     m_nalus.clear();
@@ -134,16 +134,16 @@ int VideoRawParser::process(byte *dat, uint32_t len)
             m_nalus.size(), nalu_ignored);
     if (m_key_frame) {
         LOGD("m_sps_len=%u, first 4 bytes is: %02x %02x %02x %02x",
-                m_sps_len, m_sps[0], m_sps[1], m_sps[2], m_sps[3]);
+             m_sps_len, m_sps[0], m_sps[1], m_sps[2], m_sps[3]);
         LOGD("m_pps_len=%u, first 4 bytes is: %02x %02x %02x %02x",
-                m_pps_len, m_pps[0], m_pps[1], m_pps[2], m_pps[3]);
+             m_pps_len, m_pps[0], m_pps[1], m_pps[2], m_pps[3]);
     }
     uint32_t nalu_len = 0;
-    foreach(m_nalus, it) {
+    FOR_VECTOR_ITERATOR(NaluItem *, m_nalus, it) {
         LOGD("length=%u, first 4 bytes is: %02x %02x %02x %02x",
-                (*it)->first,
-                (*it)->second[0], (*it)->second[1],
-                (*it)->second[2], (*it)->second[3]);
+             (*it)->first,
+             (*it)->second[0], (*it)->second[1],
+             (*it)->second[2], (*it)->second[3]);
         nalu_len += (*it)->first;
     }
     if (nalu_len + (m_nalus.size() + nalu_ignored)*4 != len) {
@@ -207,7 +207,7 @@ void AudioRawParser::adts_header2asc(
 
 #ifdef XDEBUG
     LOGI("profile=%u, sample_rate_idx=%u, channel=%u",
-            profile, sample_rate_idx, channel);
+         profile, sample_rate_idx, channel);
 #endif
 
     asc[0] = ((profile+1)<<3)|((sample_rate_idx&0x0E)>>1);

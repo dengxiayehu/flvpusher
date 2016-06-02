@@ -83,13 +83,13 @@ private:
     int init_tracks_from_box(Box *box, Track *&trak);
 
     static uint32_t chunk_containing_sample(uint32_t sample_idx,
-            const SampleToChunkBox *stsc, uint32_t &first_sample_in_chunk,
-            ReadStatus::LocateChunkCache *lcc = NULL);
+                                            const SampleToChunkBox *stsc, uint32_t &first_sample_in_chunk,
+                                            ReadStatus::LocateChunkCache *lcc = NULL);
 
     static int locate_sample(Track *trak, ReadStatus *rstatus,
-            SampleEntry *sentry);
+                             SampleEntry *sentry);
     static int read_frame(File &file, Track *trak,
-            SampleEntry *sentry, Frame *f);
+                          SampleEntry *sentry, Frame *f);
 
     static void print_ReadStatus(const ReadStatus &rs);
 
