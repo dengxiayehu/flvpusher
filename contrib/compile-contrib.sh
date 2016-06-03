@@ -19,6 +19,7 @@ TARS_HDLR_ARR=(
 "openssl-1.0.2g.tar.gz:compile_openssl"
 "curl-7.49.1.tar.gz:compile_curl"
 "librtmp.tar.bz2:compile_librtmp"
+"mongoose-5.6.tar.gz:compile_mongoose"
 )
 
 [ ! -d "$TARBALLS_DIR" ] && { \
@@ -40,18 +41,27 @@ function compile_openssl() {
     return 1
 }
 
-function compile_curl() {
-    ./configure --prefix="$INSTALL_DIR" --enable-static --enable-shared=no --disable-ldap --disable-ldaps --with-zlib="$INSTALL_DIR" --with-ssl="$INSTALL_DIR" &&
-        make $MKFLAGS &&
-        make install && return 0
-    return 1
-}
-
 function compile_librtmp() {
     make $MKFLAGS \
          INC=-I"$INSTALL_DIR/include" XLDFLAGS="-L$INSTALL_DIR/lib" \
          prefix="$INSTALL_DIR" \
          install && return 0
+    return 1
+}
+
+function compile_curl() {
+    PKG_CONFIG_PATH=$INSTALL_DIR/lib/pkgconfig LIBS=-ldl ./configure --prefix="$INSTALL_DIR" --enable-static --enable-shared=no --disable-ldap --disable-ldaps --without-libidn && \
+        make $MKFLAGS &&
+        make install && return 0
+    return 1
+}
+
+function compile_mongoose() {
+    [ ! -d build ] && mkdir build
+    cd build && \
+        cmake .. && \
+        make && \
+        make install && return 0
     return 1
 }
 
