@@ -26,7 +26,7 @@ public:
     virtual char *get_config(const char *conf_name) = 0;
     virtual int set_config(const char *conf_name, const char *conf_value, const char *note = NULL) = 0;
     virtual int add_config(const char *conf_name, const char *conf_value, const char *note = NULL,
-            ConfigType type = STRING, const char *def = NULL, const char *range = NULL) = 0;
+                           ConfigType type = STRING, const char *def = NULL, const char *range = NULL) = 0;
     virtual int del_config(const char *conf_name) = 0;
     virtual int register_config_update_cb(ConfigUpdateCB cb, void *user = NULL) = 0;
     virtual int register_config(const char *conf_name) = 0;

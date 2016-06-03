@@ -1,16 +1,12 @@
-#include "app.h"
-
 #include <libgen.h>
 #include <memory>
 #include <vector>
-
-#include <xlog.h>
-
 #include <cstdlib>
 #include <getopt.h>
+#include <xlog.h>
 
+#include "app.h"
 #include "config.h"
-
 #include "flv_pusher.h"
 #if defined (VERSION) && (VERSION > 1)
 # include "mp4_pusher1.h"
@@ -22,7 +18,6 @@
 #include "rtsp_source.h"
 #include "hls_segmenter.h"
 #include "rtmp_handler.h"
-#include "config.h"
 
 using namespace xutil;
 

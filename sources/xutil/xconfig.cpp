@@ -1,3 +1,5 @@
+#include <sys/inotify.h>
+
 #include "xconfig.h"
 #include "xlog.h"
 #include "xfile.h"
@@ -17,7 +19,7 @@ public:
     virtual char *get_config(const char *conf_name);
     virtual int set_config(const char *conf_name, const char *conf_value, const char *note = NULL);
     virtual int add_config(const char *conf_name, const char *conf_value, const char *note = NULL,
-            ConfigType type = STRING, const char *def = NULL, const char *range = NULL);
+                           ConfigType type = STRING, const char *def = NULL, const char *range = NULL);
     virtual int del_config(const char *conf_name);
     virtual int register_config_update_cb(ConfigUpdateCB cb, void *user = NULL);
     virtual int register_config(const char *conf_name);
@@ -41,7 +43,7 @@ private:
 
         ConfigItem();
         ConfigItem(char *name_, char *value_,
-                char *typestr, char *def_, char *range_, char *note_);
+                   char *typestr, char *def_, char *range_, char *note_);
         ~ConfigItem();
 
         bool is_valid() const;
@@ -75,7 +77,7 @@ ConfigImpl::ConfigItem::ConfigItem() :
 }
 
 ConfigImpl::ConfigItem::ConfigItem(char *name_, char *value_,
-        char *typestr, char *def_, char *range_, char *note_) :
+                                   char *typestr, char *def_, char *range_, char *note_) :
     name(strdup_(name_)), value(strdup_(value_)),
     type(str2type(typestr)),
     def(strdup_(def_)), range(strdup_(range_)),
@@ -243,7 +245,7 @@ int ConfigImpl::set_config(const char *conf_name, const char *conf_value, const 
 }
 
 int ConfigImpl::add_config(const char *conf_name, const char *conf_value, const char *note,
-        ConfigType type, const char *def, const char *range)
+                           ConfigType type, const char *def, const char *range)
 {
     AutoLock _l(m_mutex);
 
@@ -252,7 +254,7 @@ int ConfigImpl::add_config(const char *conf_name, const char *conf_value, const 
         return -1;
     }
     ConfigItem *item = new ConfigItem((char *) conf_name, (char *) conf_value,
-            (char *) ConfigItem::type2str(type), (char *) def, (char *) range, (char *) note);
+                                      (char *) ConfigItem::type2str(type), (char *) def, (char *) range, (char *) note);
     if (!item->is_valid()) {
         SAFE_DELETE(item);
         return -1;
@@ -427,7 +429,7 @@ int ConfigImpl::stop_monitor()
     return 0;
 }
 
-unsigned int ConfigImpl::monitor_routine(void *arg)
+void *ConfigImpl::monitor_routine(void *arg)
 {
 #define EVENT_HEADER_SIZE   (sizeof(struct inotify_event))
     int fd = -1, wd = -1;
@@ -447,7 +449,7 @@ unsigned int ConfigImpl::monitor_routine(void *arg)
             AutoLock _l(m_mutex);
 
             if ((wd = inotify_add_watch(fd, STR(m_path),
-                            IN_IGNORED|IN_CLOSE_WRITE|IN_MOVE_SELF|IN_MOVE)) < 0) {
+                                        IN_IGNORED|IN_CLOSE_WRITE|IN_MOVE_SELF|IN_MOVE)) < 0) {
                 LOGE("inotify_add_watch() failed: %s", ERRNOMSG);
                 goto out;
             }
@@ -502,7 +504,7 @@ out:
     if (wd >= 0)
         inotify_rm_watch(fd, wd);
     SAFE_CLOSE(fd);
-    return 0;
+    return (void *) NULL;
 }
 
 Config *create_config(const char *config_path)

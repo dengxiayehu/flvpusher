@@ -153,4 +153,23 @@
 
 #define UNUSED(x)   ((void) (x))
 
+#define DIRSEP '/'
+
+#include <limits.h>
+#include <stdlib.h>
+#define ABS_PATH(rel, abs, abs_size) realpath((rel), (abs))
+
+#define MAKEFOURCC(ch0, ch1, ch2, ch3) \
+        ((uint32_t)(uint8_t)(ch0) | ((uint32_t)(uint8_t)(ch1) << 8) | \
+         ((uint32_t)(uint8_t)(ch2) << 16) | ((uint32_t)(uint8_t)(ch3) << 24 ))
+
+#define MAKE_TAG8(a,b,c,d,e,f,g,h) ((uint64_t)(((uint64_t)(a))<<56)|(((uint64_t)(b))<<48)|(((uint64_t)(c))<<40)|(((uint64_t)(d))<<32)|(((uint64_t)(e))<<24)|(((uint64_t)(f))<<16)|(((uint64_t)(g))<<8)|((uint64_t)(h)))
+#define MAKE_TAG7(a,b,c,d,e,f,g) MAKE_TAG8(a,b,c,d,e,f,g,0)
+#define MAKE_TAG6(a,b,c,d,e,f) MAKE_TAG7(a,b,c,d,e,f,0)
+#define MAKE_TAG5(a,b,c,d,e) MAKE_TAG6(a,b,c,d,e,0)
+#define MAKE_TAG4(a,b,c,d) MAKE_TAG5(a,b,c,d,0)
+#define MAKE_TAG3(a,b,c) MAKE_TAG4(a,b,c,0)
+#define MAKE_TAG2(a,b) MAKE_TAG3(a,b,0)
+#define MAKE_TAG1(a) MAKE_TAG2(a,0)
+
 #endif /* end of _XUTIL_MACROS_H_ */

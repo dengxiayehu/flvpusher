@@ -1,7 +1,7 @@
 #ifndef _XCURL_H_
 #define _XCURL_H_
 
-#include <curl.h>
+#include <curl/curl.h>
 
 #include "xutil.h"
 

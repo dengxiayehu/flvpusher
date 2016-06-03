@@ -8,7 +8,7 @@ ADD_DEFINITIONS(-ggdb3 -O0 -Wall -Werror)
 
 INCLUDE_DIRECTORIES(
 	xutil
-	../contrib/install/include
+	${CMAKE_CURRENT_SOURCE_DIR}/../contrib/install/include
 )
 
 LINK_DIRECTORIES(
@@ -17,7 +17,7 @@ LINK_DIRECTORIES(
 
 FILE(GLOB SOURCES "*.cpp" "xutil/*.cpp")
 
-SET(DEPEND_MODULES pthread librtmp.a libssl.a libcrypto.a dl libz.a)
+SET(DEPEND_MODULES pthread dl libssl.a libcrypto.a libz.a libcurl.a librtmp.a dl rt libmongoose.a)
 
 ADD_EXECUTABLE(${MODULE_NAME} ${SOURCES})
 TARGET_LINK_LIBRARIES(${MODULE_NAME} ${DEPEND_MODULES})
