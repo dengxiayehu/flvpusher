@@ -2,6 +2,9 @@
 #define _APP_H_
 
 #include <xutil.h>
+#include <xconfig.h>
+
+#include "config.h"
 
 using xutil::status_t;
 
@@ -38,7 +41,7 @@ private:
     int init();
     void cleanup();
 
-    int load_cfg(const char *cfg_file);
+    int load_cfg(const char *cfg_file = DEFAULT_CFG_FILE);
     int parse_arg(int argc, char *argv[]);
     int check_arg() const;
     void usage() const;
@@ -68,6 +71,8 @@ private:
     HLSSegmenter*m_hls;
 
     volatile bool m_quit;
+
+    xconfig::Config *m_conf;
 };
 
 }

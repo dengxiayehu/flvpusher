@@ -24,7 +24,7 @@ public:
     int send_audio(int32_t timestamp, byte *dat, uint32_t length);
 
     bool send_rtmp_pkt(int pkttype, uint32_t ts,
-            const byte *buf, uint32_t pktsize);
+                       const byte *buf, uint32_t pktsize);
 
 private:
     struct DataInfo {
@@ -66,7 +66,7 @@ private:
 private:
     static int make_asc_body(const byte asc[], byte buf[], uint32_t len);
     static int make_audio_body(const byte *dat, uint32_t dat_len,
-            byte buf[], uint32_t len);
+                               byte buf[], uint32_t len);
 
     static int make_avc_dcr_body(byte *buf,
             const byte *sps, uint32_t sps_len,
@@ -77,13 +77,13 @@ private:
     static byte pkttyp2channel(byte typ);
 
     static int rtmp_check_alloc_array(RTMPPacket **prev_pkt, int *nb_prev_pkt,
-            int channel);
+                                      int channel);
     static int rtmp_packet_create(RTMPPacket *pkt, int channel_id, int type,
-            int timestamp, int size);
+                                  int timestamp, int size);
     static int rtmp_send_packet(RTMPContext *rt, RTMPPacket *pkt, int track);
     static void rtmp_packet_destroy(RTMPPacket *pkt);
     static int rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_size,
-            RTMPPacket **prev_pkt_ptr, int *nb_prev_pkt);
+                                 RTMPPacket **prev_pkt_ptr, int *nb_prev_pkt);
     static int send_to_network(RTMPContext *rt, const uint8_t *buf, int size);
 
 private:

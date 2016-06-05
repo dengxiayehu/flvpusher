@@ -28,4 +28,51 @@ bool valid_vod_m3u8(const string &filename)
     return false;
 }
 
+bool is_valid_m3u8(const uint8_t *buf, size_t size)
+{
+    if (!buf || size < 7)
+        return false;
+
+    if (memcmp(buf, "#EXTM3U", 7) != 0)
+        return false;
+
+    buf += 7;
+    size -= 7;
+
+    while (size--) {
+        static const char *const ext[] = {
+            "TARGETDURATION",
+            "MEDIA-SEQUENCE",
+            "KEY",
+            "ALLOW-CACHE",
+            "ENDLIST",
+            "STREAM-INF",
+            "DISCONTINUITY",
+            "VERSION"
+        };
+
+        if (*buf++ != '#')
+            continue;
+
+        if (size < 6)
+            continue;
+
+        if (memcmp(buf, "EXT-X-", 6))
+            continue;
+
+        buf += 6;
+        size -= 6;
+
+        for (size_t i = 0; i < NELEM(ext); ++i) {
+            size_t len = strlen(ext[i]);
+            if (size < 0 || (size_t) size < len)
+                continue;
+            if (!memcmp(buf, ext[i], len))
+                return true;
+        }
+    }
+
+    return false;
+}
+
 }

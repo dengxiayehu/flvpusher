@@ -16,7 +16,7 @@ void rtmp_log(int level, const char *fmt, va_list args)
     switch (level) {
     default:
     case RTMP_LOGCRIT:
-    case RTMP_LOGERROR:     level = xlog::ERROR; break;
+    case RTMP_LOGERROR:     level = xlog::ERR;   break;
     case RTMP_LOGWARNING:   level = xlog::WARN;  break;
     case RTMP_LOGINFO:      level = xlog::INFO;  break;
     case RTMP_LOGDEBUG:     level = xlog::DEBUG; break;

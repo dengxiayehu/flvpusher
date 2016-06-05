@@ -12,8 +12,8 @@
 #include <cerrno>
 
 #define COLOR_FORMAT_NONE           "\033[0m"
-#define COLOR_FORMAT_LEVEL_WARNING  "\033[33;1m"
-#define COLOR_FORMAT_LEVEL_ERROR    "\033[31;1m"
+#define COLOR_FORMAT_LEVEL_WARN     "\033[33;1m"
+#define COLOR_FORMAT_LEVEL_ERR      "\033[31;1m"
 #define COLOR_FORMAT_LEVEL_INFO     "\033[37;0m"
 #define COLOR_FORMAT_LEVEL_DEBUG    "\033[37;0m"
 #define COLOR_FORMAT_LEVEL_LOG      "\033[37;0m"
@@ -35,16 +35,17 @@ static RecursiveMutex mutex;
 static const char *color_level[] = {
     COLOR_FORMAT_LEVEL_DEBUG,
     COLOR_FORMAT_LEVEL_INFO,
-    COLOR_FORMAT_LEVEL_WARNING,
-    COLOR_FORMAT_LEVEL_ERROR
+    COLOR_FORMAT_LEVEL_WARN,
+    COLOR_FORMAT_LEVEL_ERR
 };
 
 status_t log_add_dst(const char *logfile, log_level lvl, int flgs)
 {
     AutoLock _l(mutex);
 
-    int fd = open(logfile, O_WRONLY | O_CREAT | O_NOCTTY
-            | (flgs&LOG_TRUNC ? O_TRUNC:O_APPEND), 0666);
+    int fd = open(logfile,
+                  O_WRONLY|O_CREAT|O_NOCTTY|(flgs&LOG_TRUNC?O_TRUNC:O_APPEND),
+                  0666);
     if (fd < 0) {
         fprintf(stderr, "Open \"%s\" failed: %s\n",
                 logfile, ERRNOMSG);
@@ -74,17 +75,41 @@ status_t log_add_dst(const char *logfile, log_level lvl, int flgs)
     return SUCCESS;
 }
 
-void set_log_level(log_level lvl)
+int set_log_level(const char *lvlstr)
+{
+    if (!lvlstr) {
+        return -1;
+    }
+
+    if (!strcasecmp(lvlstr, "DEBUG")) {
+        xlog::set_log_level(xlog::DEBUG);
+    } else if (!strcasecmp(lvlstr, "INFO")) {
+        xlog::set_log_level(xlog::INFO);
+    } else if (!strcasecmp(lvlstr, "WARN")) {
+        xlog::set_log_level(xlog::WARN);
+    } else if (!strcasecmp(lvlstr, "ERR")) {
+        xlog::set_log_level(xlog::ERR);
+    } else {
+        LOGE("Invalid log level \"%s\"", lvlstr);
+        return -1;
+    }
+
+    return 0;
+}
+
+int set_log_level(log_level lvl)
 {
     AutoLock _l(mutex);
 
     for (log_t *l = log; l; l = l->next) {
         l->lvl = lvl;
     }
+
+    return 0;
 }
 
 int log_print(const char *curfile, const int lineno, const log_level lvl,
-        const char *fmt, ...)
+              const char *fmt, ...)
 {
     static const char *lvl_name[] = {"[DEBUG]", "[INFO]", "[WARN]", "[ERROR]"};
 
@@ -104,10 +129,10 @@ int log_print(const char *curfile, const int lineno, const log_level lvl,
             } else {
                 struct tm *ptm = localtime(&tv.tv_sec);
                 snprintf(time_buf, sizeof(time_buf),
-                        "%04d-%02d-%02d-%02d:%02d:%02d.%03ld ",
-                        ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday,
-                        ptm->tm_hour, ptm->tm_min, ptm->tm_sec,
-                        tv.tv_usec/1000);
+                         "%04d-%02d-%02d-%02d:%02d:%02d.%03ld ",
+                         ptm->tm_year+1900, ptm->tm_mon+1, ptm->tm_mday,
+                         ptm->tm_hour, ptm->tm_min, ptm->tm_sec,
+                         tv.tv_usec/1000);
             }
         }
 
@@ -118,11 +143,11 @@ int log_print(const char *curfile, const int lineno, const log_level lvl,
 
         char buf[MaxLine];
         int ret = snprintf(buf, sizeof(buf), "%s%s%s[%s:%d] %s ",
-                color_level[lvl],
-                time_buf,
-                tid_buf,
-                STR(basename_(curfile)), lineno,
-                lvl_name[lvl]);
+                           color_level[lvl],
+                           time_buf,
+                           tid_buf,
+                           STR(basename_(curfile)), lineno,
+                           lvl_name[lvl]);
 
         va_list ap;
         va_start(ap, fmt);

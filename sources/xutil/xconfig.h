@@ -43,24 +43,25 @@ void destroy_config(Config **config);
 
 #define GET_CONFIG_INT(c, x) do { \
         char *s = (c)->get_config(#x); \
-        if (!s) { E("No " #x " in config file"); assert(0); } \
+        if (!s) { LOGE("No " #x " in config file"); assert(0); } \
         x = atoi(s); \
     } while (0)
 #define DECL_GET_CONFIG_INT(c, x) int x; GET_CONFIG_INT(c, x)
 
 #define GET_CONFIG_BOOL(c, x) do { \
         char *s = (c)->get_config(#x); \
-        if (!s) { E("No " #x " in config file"); assert(0); } \
-        x = xutil::str2bool(s); \
+        if (!s) { LOGE("No " #x " in config file"); assert(0); } \
+        if (s && !strncasecmp(s, "true", 4)) x = true; \
+        else x = false; \
     } while (0)
 #define DECL_GET_CONFIG_BOOL(c, x) bool x; GET_CONFIG_BOOL(c, x)
 
 #define GET_CONFIG_STRING(c, x) do { \
         char *s = (c)->get_config(#x); \
-        if (!s) { E("No " #x " in config file"); assert(0); } \
-        x = strdup(s); \
+        if (!s) { LOGE("No " #x " in config file"); assert(0); } \
+        x = s; \
     } while (0)
-#define DECL_GET_CONFIG_STRING(c, x) char *x; GET_CONFIG_STRING(c, x)
+#define DECL_GET_CONFIG_STRING(c, x) std::string x; GET_CONFIG_STRING(c, x)
 
 }
 

@@ -48,7 +48,7 @@ int MP4Pusher1::prepare()
 int MP4Pusher1::loop()
 {
     if (prepare() < 0) {
-        LOGE("TSPusher's prepare() failed");
+        LOGE("MP4Pusher1's prepare() failed");
         return -1;
     }
     

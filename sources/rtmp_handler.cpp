@@ -59,7 +59,7 @@ int RtmpHandler::connect(const std::string &liveurl)
     rt->rtmp = RTMP_Alloc();
     if (!rt->rtmp) {
         LOGE("RTMP_Alloc() failed for liveurl: \"%s\"",
-                liveurl.c_str());
+             liveurl.c_str());
         return -1;
     }
 
@@ -71,9 +71,9 @@ int RtmpHandler::connect(const std::string &liveurl)
     RTMP_LogSetCallback(rtmp_log);
 
     if (!RTMP_SetupURL(rt->rtmp,
-                const_cast<char *>(liveurl.c_str()))) {
+                       const_cast<char *>(liveurl.c_str()))) {
         LOGE("RTMP_SetupURL() failed for liveurl: \"%s\"",
-                liveurl.c_str());
+             liveurl.c_str());
         goto bail;
     }
 
@@ -82,13 +82,13 @@ int RtmpHandler::connect(const std::string &liveurl)
 
     if (!RTMP_Connect(rt->rtmp, NULL)) {
         LOGE("RTMP_Connect failed for liveurl: \"%s\"",
-                liveurl.c_str());
+             liveurl.c_str());
         goto bail;
     };
 
     if (!RTMP_ConnectStream(rt->rtmp, 0)) {
         LOGE("RTMP_ConnectStream failed for liveurl: \"%s\"",
-                liveurl.c_str());
+             liveurl.c_str());
         goto bail;
     }
 
@@ -97,7 +97,7 @@ int RtmpHandler::connect(const std::string &liveurl)
         put_be32(buf, rt->rtmp->m_outChunkSize);
         if (!send_rtmp_pkt(RTMP_PACKET_TYPE_CHUNK_SIZE, 0, buf, 4)) {
             LOGE("Send chunk size %d to server failed",
-                    rt->rtmp->m_outChunkSize);
+                 rt->rtmp->m_outChunkSize);
             goto bail;
         }
     }
@@ -105,7 +105,7 @@ int RtmpHandler::connect(const std::string &liveurl)
     m_url = liveurl;
 
     LOGI("Connect to rtmp server with url \"%s\" ok",
-            m_url.c_str());
+         m_url.c_str());
     return 0;
 
 bail:
@@ -119,7 +119,7 @@ int RtmpHandler::disconnect()
     if (rt->rtmp) {
         if (RTMP_IsConnected(rt->rtmp)) {
             LOGI("Disconnect from rtmp server (url: %s)",
-                    m_url.c_str());
+                 m_url.c_str());
         }
 
         RTMP_Close(rt->rtmp);
@@ -130,7 +130,7 @@ int RtmpHandler::disconnect()
 }
 
 int RtmpHandler::send_video(int32_t timestamp,
-        byte *dat, uint32_t length)
+                            byte *dat, uint32_t length)
 {
     if (m_vparser->process(dat, length) < 0) {
         LOGE("Process video failed");
@@ -195,7 +195,7 @@ int RtmpHandler::send_video(int32_t timestamp,
 
 #ifdef XDEBUG_TIMESTAMP
         LOGI("New video stream starts, atm_offset:%d, vtm_offset:%d",
-                m_ainfo.tm_offset, m_vinfo.tm_offset);
+             m_ainfo.tm_offset, m_vinfo.tm_offset);
 #endif
 
         m_vinfo.need_cfg = true;
@@ -209,8 +209,7 @@ int RtmpHandler::send_video(int32_t timestamp,
                     m_vparser->get_sps(), m_vparser->get_sps_length(),
                     m_vparser->get_pps(), m_vparser->get_pps_length());
             if (!send_rtmp_pkt(RTMP_PACKET_TYPE_VIDEO,
-                        timestamp+m_vinfo.tm_offset,
-                        avc_dcr_body, body_len)) {
+                               timestamp+m_vinfo.tm_offset, avc_dcr_body, body_len)) {
                 LOGE("Send video avc_dcr to rtmpserver failed");
                 return -1;
             }
@@ -224,8 +223,8 @@ int RtmpHandler::send_video(int32_t timestamp,
     int body_len = make_video_body(buf, cur-buf,
             m_vparser->is_key_frame());
     if (!send_rtmp_pkt(RTMP_PACKET_TYPE_VIDEO,
-                timestamp+m_vinfo.tm_offset,
-                buf, body_len)) {
+                       timestamp+m_vinfo.tm_offset,
+                       buf, body_len)) {
         LOGE("Send video data to rtmpserver failed");
         return -1;
     }
@@ -252,8 +251,8 @@ int RtmpHandler::make_video_body(byte *buf, uint32_t dat_len,
 }
 
 int RtmpHandler::make_avc_dcr_body(byte *buf,
-        const byte *sps, uint32_t sps_len,
-        const byte *pps, uint32_t pps_len)
+                                   const byte *sps, uint32_t sps_len,
+                                   const byte *pps, uint32_t pps_len)
 {
     uint32_t idx = 0;
 
@@ -284,15 +283,15 @@ int RtmpHandler::make_avc_dcr_body(byte *buf,
 
 #ifdef XDEBUG
     LOGI("[avc_dcr] SPS: %02x %02x %02x %02x ... (%u bytes in total)",
-            sps[0], sps[1], sps[2], sps[3], sps_len);
+         sps[0], sps[1], sps[2], sps[3], sps_len);
     LOGI("[avc_dcr] PPS: %02x %02x %02x %02x ... (%u bytes in total)",
-            pps[0], pps[1], pps[2], pps[3], pps_len);
+         pps[0], pps[1], pps[2], pps[3], pps_len);
 #endif
     return idx;
 }
 
 int RtmpHandler::send_audio(int32_t timestamp,
-        byte *dat, uint32_t length)
+                            byte *dat, uint32_t length)
 {
     if (m_aparser->process(dat, length) < 0) {
         LOGE("Process audio failed");
@@ -335,14 +334,14 @@ int RtmpHandler::send_audio(int32_t timestamp,
 
 #ifdef XDEBUG_TIMESTAMP
             LOGI("New audio stream starts, atm_offset:%d, vtm_offset:%d",
-                    m_ainfo.tm_offset, m_vinfo.tm_offset);
+                 m_ainfo.tm_offset, m_vinfo.tm_offset);
 #endif
         }
 
         // NOTE: asc-pkt's timestamp is always 0
         if (!send_rtmp_pkt(RTMP_PACKET_TYPE_AUDIO,
-                    timestamp+m_ainfo.tm_offset,
-                    asc_body, sizeof(asc_body))) {
+                           timestamp+m_ainfo.tm_offset,
+                           asc_body, sizeof(asc_body))) {
             LOGE("Send asc-pkt failed");
             m_ainfo.need_cfg = true;
             return -1;
@@ -358,8 +357,8 @@ int RtmpHandler::send_audio(int32_t timestamp,
     byte *buf = (byte *) m_mem_holder.alloc(length-7+2);
     int body_len = make_audio_body(dat+7, length-7, buf, length-7+2);
     if (!send_rtmp_pkt(RTMP_PACKET_TYPE_AUDIO,
-                timestamp+m_ainfo.tm_offset,
-                buf, body_len)) {
+                       timestamp+m_ainfo.tm_offset,
+                       buf, body_len)) {
         LOGE("Send audio data to rtmpserver failed");
         return -1;
     }
@@ -380,7 +379,7 @@ int RtmpHandler::make_asc_body(const byte asc[2], byte buf[], uint32_t len)
 
 // Note: dat is ADTS header removed
 int RtmpHandler::make_audio_body(const byte *dat, uint32_t dat_len,
-        byte buf[], uint32_t len)
+                                 byte buf[], uint32_t len)
 {
     buf[0] = 0xAF;
     buf[1] = 0x01;
@@ -400,12 +399,12 @@ byte RtmpHandler::pkttyp2channel(byte typ)
 }
 
 bool RtmpHandler::send_rtmp_pkt(int pkttype, uint32_t ts,
-        const byte *buf, uint32_t pktsize)
+                                const byte *buf, uint32_t pktsize)
 {
     if (m_flvmuxer.is_opened()) {
         if (m_flvmuxer.write_tag(pkttype, ts, buf, pktsize) < 0) {
             LOGE("Write tag to flv file \"%s\" failed (cont)",
-                    m_flvmuxer.get_path());
+                 m_flvmuxer.get_path());
             // Fall through
         }
     }
@@ -435,13 +434,13 @@ bool RtmpHandler::send_rtmp_pkt(int pkttype, uint32_t ts,
     if (((pkttype == RTMP_PACKET_TYPE_VIDEO || pkttype == RTMP_PACKET_TYPE_AUDIO) && !ts) ||
         pkttype == RTMP_PACKET_TYPE_INFO) {
         if (rtmp_check_alloc_array(&rt->prev_pkt[1],
-                    &rt->nb_prev_pkt[1], channel) < 0)
+                                   &rt->nb_prev_pkt[1], channel) < 0)
             return false;
         rt->prev_pkt[1][channel].channel_id = 0;
     }
 
     if (rtmp_packet_create(&rt->out_pkt, channel,
-                pkttype, ts, pktsize) < 0)
+                           pkttype, ts, pktsize) < 0)
         return false;
 
     rt->out_pkt.extra = rt->rtmp->m_stream_id;
@@ -454,7 +453,7 @@ bool RtmpHandler::send_rtmp_pkt(int pkttype, uint32_t ts,
 }
 
 int RtmpHandler::rtmp_check_alloc_array(RTMPPacket **prev_pkt, int *nb_prev_pkt,
-        int channel)
+                                        int channel)
 {
     int nb_alloc;
     RTMPPacket *ptr;
@@ -474,7 +473,7 @@ int RtmpHandler::rtmp_check_alloc_array(RTMPPacket **prev_pkt, int *nb_prev_pkt,
 }
 
 int RtmpHandler::rtmp_packet_create(RTMPPacket *pkt, int channel_id, int type,
-        int timestamp, int size)
+                                    int timestamp, int size)
 {
     if (size) {
         pkt->data = (uint8_t *) malloc(size);
@@ -497,7 +496,7 @@ int RtmpHandler::rtmp_send_packet(RTMPContext *rt, RTMPPacket *pkt, int track)
     int ret;
 
     ret = rtmp_packet_write(rt, pkt, rt->rtmp->m_outChunkSize,
-            &rt->prev_pkt[1], &rt->nb_prev_pkt[1]);
+                            &rt->prev_pkt[1], &rt->nb_prev_pkt[1]);
     rtmp_packet_destroy(pkt);
     return ret;
 }
@@ -511,7 +510,7 @@ void RtmpHandler::rtmp_packet_destroy(RTMPPacket *pkt)
 }
 
 int RtmpHandler::rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_size,
-        RTMPPacket **prev_pkt_ptr, int *nb_prev_pkt)
+                                   RTMPPacket **prev_pkt_ptr, int *nb_prev_pkt)
 {
     uint8_t pkt_hdr[16], *p = pkt_hdr;
     int mode = RTMP_PS_TWELVEBYTES;
@@ -523,7 +522,7 @@ int RtmpHandler::rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_s
     uint32_t timestamp;
 
     if ((ret = rtmp_check_alloc_array(prev_pkt_ptr, nb_prev_pkt,
-                    pkt->channel_id)) < 0)
+                                      pkt->channel_id)) < 0)
         return ret;
     prev_pkt = *prev_pkt_ptr;
 
@@ -543,7 +542,7 @@ int RtmpHandler::rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_s
 
     if (use_delta) {
         if (pkt->type == prev_pkt[pkt->channel_id].type &&
-                pkt->size == prev_pkt[pkt->channel_id].size) {
+            pkt->size == prev_pkt[pkt->channel_id].size) {
             mode = RTMP_PS_FOURBYTES;
             if (pkt->ts_field == prev_pkt[pkt->channel_id].ts_field)
                 mode = RTMP_PS_ONEBYTE;

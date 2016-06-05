@@ -391,8 +391,8 @@ int ConfigImpl::load(const char *config_path)
         }
 item_done:
         item = new ConfigItem(name, value,
-                type[0] ? type : NULL, def[0] ? def : NULL,
-                range[0] ? range : NULL, note[0] ? note : NULL);
+                              type[0] ? type : NULL, def[0] ? def : NULL,
+                              range[0] ? range : NULL, note[0] ? note : NULL);
         if (!item->is_valid()) goto skip;
         if (has_config(name)) {
             if (!m_cb_map.empty() &&

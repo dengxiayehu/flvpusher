@@ -14,12 +14,14 @@
 # include "mp4_pusher.h"
 #endif
 #include "ts_pusher.h"
+#include "hls_pusher.h"
 #include "rtmp_source.h"
 #include "rtsp_source.h"
 #include "hls_segmenter.h"
 #include "rtmp_handler.h"
 
 using namespace xutil;
+using namespace xconfig;
 
 namespace flvpusher {
 
@@ -27,6 +29,7 @@ App *App::app = NULL;
 RecursiveMutex App::mutex;
 
 static void sighandler(int signo);
+static int on_config_change(const char *conf_name, const char *value, void *user);
 
 App::App() :
     m_sig_hdl(Signaler::get_instance()),
@@ -35,7 +38,8 @@ App::App() :
     m_rtmp_hdl(NULL),
     m_pusher(NULL),
     m_hls(NULL),
-    m_quit(false)
+    m_quit(false),
+    m_conf(NULL)
 {
     if (init() < 0) {
         LOGE("App::init() failed, quit program");
@@ -73,6 +77,10 @@ void App::cleanup()
     SAFE_DELETE(m_hls);
     SAFE_DELETE(m_sig_hdl);
 
+    if (m_conf) {
+        destroy_config(&m_conf);
+    }
+
     xlog::log_close();
 }
 
@@ -84,6 +92,23 @@ void App::ask2quit()
         m_pusher->ask2quit();
     if (m_hls)
         m_hls->ask2quit();
+}
+
+int App::load_cfg(const char *cfg_file)
+{
+    if (!is_file(cfg_file)) {
+        // It's ok if config file is missing
+        return 0;
+    }
+
+    m_conf = create_config(cfg_file);
+    if (!m_conf) {
+        LOGE("create config failed");
+        return -1;
+    }
+    m_conf->register_config_update_cb(on_config_change, this);
+    m_conf->register_config("debug_level");
+    return 0;
 }
 
 int App::parse_arg(int argc, char *argv[])
@@ -118,18 +143,9 @@ int App::parse_arg(int argc, char *argv[])
             m_liveurl = optarg;
             break;
 
-        case 'l': {
-            xlog::log_level loglvl = xlog::DEBUG;
-            if      (!strcasecmp(optarg, "DEBUG"))  loglvl = xlog::DEBUG;
-            else if (!strcasecmp(optarg, "INFO"))   loglvl = xlog::INFO;
-            else if (!strcasecmp(optarg, "WARN"))   loglvl = xlog::WARN;
-            else if (!strcasecmp(optarg, "ERROR"))  loglvl = xlog::ERROR;
-            else {
-                LOGE("Invalid log level \"%s\"", optarg);
-                return -1;
-            }
-            xlog::set_log_level(loglvl);
-            } break;
+        case 'l':
+            xlog::set_log_level(optarg);
+            break;
 
         case 'v':
             m_dvfile = optarg;
@@ -193,7 +209,13 @@ int App::parse_arg(int argc, char *argv[])
             fprintf(stderr, "Init xlog system failed\n");
             return -1;
         }
+
+        if (m_conf) {
+            DECL_GET_CONFIG_STRING(m_conf, debug_level);
+            xlog::set_log_level(STR(debug_level));
+        }
     }
+
     return 0;
 }
 
@@ -241,14 +263,19 @@ int App::prepare()
 
 int App::main(int argc, char *argv[])
 {
+    if (load_cfg() < 0) {
+        return -1;
+    }
+
     if (parse_arg(argc, argv) < 0 ||
         check_arg() < 0) {
         usage();
         return 1;
     }
 
-    if (prepare() < 0)
+    if (prepare() < 0) {
        return -1;
+    }
 
     std::vector<std::string> input(
             xutil::split(m_input_str, INPUT_SEPARATOR));
@@ -288,6 +315,8 @@ int App::main(int argc, char *argv[])
 #endif
             } else if (end_with(*it, ".ts")) {
                 m_pusher = new TSPusher(*it, m_rtmp_hdl);
+            } else if (end_with(*it, ".m3u8")) {
+                m_pusher = new HLSPusher(*it, m_rtmp_hdl, m_conf);
             } else {
                 LOGE("Media file \"%s\" not supported (ignored)",
                      STR(*it));
@@ -318,6 +347,13 @@ int App::main(int argc, char *argv[])
 static void sighandler(int signo)
 {
     App::get_instance()->ask2quit();
+}
+
+static int on_config_change(const char *conf_name, const char *value, void *user)
+{
+    if (conf_name && value && !strncmp(conf_name, "debug_level", 11))
+        xlog::set_log_level(value);
+    return 0;
 }
 
 }
