@@ -116,7 +116,6 @@ int App::parse_arg(int argc, char *argv[])
     struct option longopts[] = {
         {"input",           required_argument, NULL, 'i'},
         {"live",            required_argument, NULL, 'L'},
-        {"log-level",       required_argument, NULL, 'l'},
         {"help",            required_argument, NULL, 'h'},
         {"dvfile",          required_argument, NULL, 'v'},
         {"dafile",          required_argument, NULL, 'a'},
@@ -133,7 +132,7 @@ int App::parse_arg(int argc, char *argv[])
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:l:hv:a:tS:s:Tt:z:c:Nf:W;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:z:c:Nf:W;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -141,10 +140,6 @@ int App::parse_arg(int argc, char *argv[])
 
         case 'L':
             m_liveurl = optarg;
-            break;
-
-        case 'l':
-            xlog::set_log_level(optarg);
             break;
 
         case 'v':
@@ -247,7 +242,7 @@ int App::check_arg() const
 
 void App::usage() const
 {
-    fprintf(stderr, "Usage: flvpusher <-i media_file> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]|[-c request-tspath]> [-h] [-l log_level|--no_logfile]\n");
+    fprintf(stderr, "Usage: flvpusher <-i media_file> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]|[-c request-tspath]> [-h] [--no_logfile]\n");
     fprintf(stderr, "Version: %d\n", VERSION);
 }
 

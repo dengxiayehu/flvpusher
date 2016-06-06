@@ -75,7 +75,6 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     }
     
     BEGIN
-    // va.m3u8 ==> va1.ts va2.ts .. va3.ts
     const char *pattern = "%d.ts";
     int basename_size = strlen(STR(m_hls_playlist)) + strlen(pattern) + 1;
     char buf[PATH_MAX] = {0};
@@ -86,15 +85,15 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     m_info.basenm = buf;
     END
     
-    if (!valid_vod_m3u8(m_hls_playlist)) {
+    if (!is_valid_vod_m3u8(m_hls_playlist)) {
         if (!loop) {
-            if (create_m3u8(true) < 0) {
+            if (create_m3u8() < 0) {
                 LOGE("Create m3u8 file \"%s\" failed", STR(m_hls_playlist));
                 ret = -1;
                 goto out;
             }
         } else {
-            LOGE("No valid m3u8 file \"%s\" exists before loop", STR(m_hls_playlist));
+            LOGE("No valid vod m3u8 file \"%s\" exists before loop", STR(m_hls_playlist));
             ret = -1;
             goto out;
         }

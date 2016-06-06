@@ -15,6 +15,8 @@
 
 #define NEW_STREAM_TIMESTAMP_THESHO 300
 
-#define DEFAULT_CFG_FILE        "./flvpusher_cfg.txt"
+#define DEFAULT_CFG_FILE            "./flvpusher_cfg.txt"
+
+#define DEFAULT_CURL_HLS_TIMEOUT    20
 
 #endif /* end of _CONFIG_H_ */
