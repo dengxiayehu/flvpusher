@@ -498,9 +498,10 @@ int HLSPusher::stream_sys::update_playlist(hls_stream *hls_new, hls_stream *hls_
                 pl_located = true;
             }
 
-            if (l->sequence + 1 != p->sequence)
-                LOGE("Gap in sequence numbers found: new=%d expected %d",
+            if (l->sequence + 1 != p->sequence) {
+                LOGW("Gap in sequence numbers found: new=%d expected %d",
                      p->sequence, l->sequence+1);
+            }
             hls_old->segments.push_back(p);
             LOGD("- segment %d appended <%d# in total>", p->sequence, hls_old->get_segment_count());
             hls_old->max_segment_length = MAX(hls_old->max_segment_length, p->duration);
@@ -594,8 +595,7 @@ int HLSPusher::prepare()
     hls->pl_segment = m_sys->playback.segment;
     if (m_sys->live) {
         m_sys->playlist.last = get_time_now();
-        m_sys->playlist.wakeup = m_sys->playlist.last + hls->duration * 1000;
-
+        m_sys->playlist.wakeup = m_sys->playlist.last + hls->duration*1000;
         m_sys->start_reload_thread();
     }
 
@@ -977,13 +977,14 @@ int HLSPusher::parse_media_sequence(stream_sys *sys, hls_stream *hls, char *read
             hls_stream *last = sys->streams.back();
             segment *last_segment = last->get_segment(last->get_segment_count()-1);
             if ((last_segment->sequence < sequence) &&
-                (sequence - last_segment->sequence > 1))
+                (sequence - last_segment->sequence > 1)) {
                 LOGE("EXT-X-MEDIA-SEQUENCE gap in playlist (new=%d, old=%d)",
                      sequence, last_segment->sequence);
-        }
-        else
+            }
+        } else {
             LOGE("EXT-X-MEDIA-SEQUENCE already present in playlist (new=%d, old=%d)",
                  sequence, hls->sequence);
+        }
     }
     hls->sequence = sequence;
     return 0;
@@ -1036,16 +1037,17 @@ int HLSPusher::parse_key(stream_sys *sys, hls_stream *hls, char *read)
                 *end = 0;
         }
 
-        if(strstr( uri , "://" ) )
+        if(strstr( uri , "://" ) ) {
             hls->current_key_path = strdup(uri);
-        else
+        } else {
             hls->current_key_path = relative_uri(hls->url, uri);
+        }
         SAFE_FREE(value);
 
         value = iv = parse_attributes(read, "IV");
-        if (!iv)
+        if (!iv) {
             hls->iv_loaded = false;
-        else {
+        } else {
             if (string_to_iv(iv, hls->AES_IV) < 0) {
                 LOGE("IV invalid");
                 err = -1;
@@ -1282,10 +1284,11 @@ int HLSPusher::prefetch(stream_sys *sys, int *current)
     hls_stream *hls = sys->get_hls(stream);
     if (!hls) return -1;
 
-    if (!hls->get_segment_count())
+    if (!hls->get_segment_count()) {
         return -1;
-    else if (hls->get_segment_count() == 1 && sys->live)
+    } else if (hls->get_segment_count() == 1 && sys->live) {
         LOGW("Only 1 segment available to prefetch in live stream; may stall");
+    }
 
     unsigned segment_amount = (unsigned) (0.5f + 10/hls->duration);
     unsigned segment_count = hls->get_segment_count();
@@ -1343,10 +1346,11 @@ void *HLSPusher::stream_sys::hls_reload_routine(void *arg)
 
             playlist.last = now;
             playlist.wakeup = now;
-            if (hls->max_segment_length > 0)
+            if (hls->max_segment_length > 0) {
                 playlist.wakeup += (uint64_t) (hls->max_segment_length * wait * 1000);
-            else
+            } else {
                 playlist.wakeup += (uint64_t) (hls->duration * wait * 1000);
+            }
         }
 
         short_snap(playlist.wakeup - now, &pusher->m_quit);
@@ -1388,11 +1392,11 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
             hls->download_segment_data(this, seg, &download.stream) < 0) {
             if (pusher->m_quit)
                 break;
+            // Fall through
         }
 
         AutoLock _l(download.mutex);
         ++download.segment;
-        download.wait.signal();
     }
 
     LOGD("hls_routine for \"%s\" ended", STR(pusher->m_input));

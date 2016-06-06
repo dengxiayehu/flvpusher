@@ -61,7 +61,6 @@ private:
         bool iv_loaded;
 
         int pl_segment;
-        std::string vod_pl;
 
         hls_stream(int id, uint64_t bw, const char *url);
         hls_stream(const hls_stream &rhs);
