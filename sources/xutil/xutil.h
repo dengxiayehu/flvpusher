@@ -120,7 +120,7 @@ void short_snap(uint64_t ms, volatile bool *quit, uint64_t granularity = 100);
 
 char *strdup_(const char *s);
 
-void rmdir_(const std::string &path);
+void rm_(const std::string &path);
 
 /////////////////////////////////////////////////////////////
 

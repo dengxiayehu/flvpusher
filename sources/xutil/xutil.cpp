@@ -448,7 +448,7 @@ char *strdup_(const char *s)
     return strdup(s);
 }
 
-void rmdir_(const std::string &path)
+void rm_(const std::string &path)
 {
     system_(STR(sprintf_("rm -rf %s", STR(path))));
 }

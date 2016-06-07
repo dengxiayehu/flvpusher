@@ -11,8 +11,7 @@ class TSParser;
 
 class TSPusher : public MediaPusher {
 public:
-    TSPusher(const std::string &input,
-            RtmpHandler *&rtmp_hdl);
+    TSPusher(const std::string &input, RtmpHandler *&rtmp_hdl);
     virtual ~TSPusher();
 
     int loop();

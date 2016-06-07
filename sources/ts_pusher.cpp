@@ -13,8 +13,7 @@ using namespace amf;
 
 namespace flvpusher {
 
-TSPusher::TSPusher(const std::string &input,
-        RtmpHandler *&rtmp_hdl) :
+TSPusher::TSPusher(const std::string &input, RtmpHandler *&rtmp_hdl) :
     MediaPusher(input, rtmp_hdl),
     m_parser(NULL),
     m_prev_ts(-1), m_tm_start(UINT64_MAX),
@@ -113,10 +112,8 @@ int TSPusher::send_metadata()
     put_amf_string_no_typ(p, "height");
     put_amf_number(p, m_height);
     put_amf_obj_end(p);
-    return m_rtmp_hdl->send_rtmp_pkt(
-            RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
-            buff,
-            p - buff);
+    return m_rtmp_hdl->send_rtmp_pkt(RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
+                                     buff, p - buff);
 }
 
 }

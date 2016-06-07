@@ -236,7 +236,6 @@ bool File::read_buffer(uint8_t *buf, size_t sz) const
         }
 
         if (feof(m_fp)) {
-            LOGI("Read to end-of-file");
             return false;
         }
 

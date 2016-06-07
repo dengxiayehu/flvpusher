@@ -34,7 +34,7 @@ protected:
 
 protected:
     std::string m_input;
-    RtmpHandler *const m_rtmp_hdl;
+    RtmpHandler *m_rtmp_hdl;
     volatile bool m_quit;
 
     std::string m_tspath;

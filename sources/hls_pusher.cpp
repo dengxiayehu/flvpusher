@@ -7,6 +7,7 @@
 #include "config.h"
 #include "hls_common.h"
 #include "hls_pusher.h"
+#include "ts_pusher.h"
 
 using namespace xconfig;
 using namespace xcurl;
@@ -637,7 +638,23 @@ skip:
 
 int HLSPusher::live_segment(segment *seg)
 {
-    return 0;
+    char tempts[] = "flvpusher-segment-XXXXXX";
+    if (mkstemp(tempts) < 0) {
+        LOGE("mkstemp failed: %s", ERRNOMSG);
+        return -1;
+    }
+
+    File::flush_content(tempts,
+                        GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "wb");
+    SAFE_DELETE(seg->iobuf);
+
+    int ret = 0;
+    auto_ptr<MediaPusher> tspusher(new TSPusher(tempts, m_rtmp_hdl));
+    if (tspusher->loop() < 0) {
+        ret = -1;
+    }
+    rm_(tempts);
+    return ret;
 }
 
 int HLSPusher::read_content_from_url(int timeout, bool verbose, bool trace_ascii,
