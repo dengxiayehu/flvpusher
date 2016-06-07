@@ -29,14 +29,13 @@ private:
         bool key_loaded;
 
         xutil::RecursiveMutex mutex;
-        std::string lpath;
         xutil::IOBuffer *iobuf;
-        bool cached;
 
         segment(const int duration, const char *uri);
         segment(const segment &obj);
         ~segment();
 
+        bool is_downloaded();
         bool operator==(const segment &rhs) const;
         std::string to_string() const;
     };
@@ -60,8 +59,6 @@ private:
         uint8_t AES_IV[AES_SIZE];
         bool iv_loaded;
 
-        int pl_segment;
-
         hls_stream(int id, uint64_t bw, const char *url);
         hls_stream(const hls_stream &rhs);
         ~hls_stream();
@@ -75,7 +72,7 @@ private:
         int manage_segment_keys(stream_sys *sys);
         int decode_segment_data(stream_sys *sys, segment *seg);
         int download_segment_key(stream_sys *sys, segment *seg);
-        int download_segment_data(stream_sys *sys, segment *seg, int *cur_stream);
+        int download_segment_data(stream_sys *sys, segment *seg, int cur_stream);
         int download(stream_sys *sys, segment *seg);
         std::string to_string() const;
     };
@@ -124,7 +121,6 @@ private:
         DECL_THREAD_ROUTINE(stream_sys, hls_routine);
         xutil::Thread *thrd;
         HLSPusher *pusher;
-        std::string dir;
 
         stream_sys(HLSPusher *pusher_);
         ~stream_sys();
@@ -164,7 +160,7 @@ private:
     static char *relative_uri(const char *url, const char *path);
     static int string_to_iv(char *string_hexa, uint8_t iv[AES_SIZE]);
     static int choose_segment(stream_sys *sys, const int current);
-    static int prefetch(stream_sys *sys, int *current);
+    static int prefetch(stream_sys *sys, int current);
     static bool compare_streams(const void* a, const void* b);
 
 private:

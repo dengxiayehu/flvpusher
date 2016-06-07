@@ -39,7 +39,6 @@ HLSPusher::segment::segment(const segment &obj)
     }
     key_path = strdup_(obj.key_path);
     iobuf = NULL;
-    lpath = obj.lpath;
 }
 
 HLSPusher::segment::~segment()
@@ -47,6 +46,12 @@ HLSPusher::segment::~segment()
     SAFE_FREE(url);
     SAFE_FREE(key_path);
     SAFE_DELETE(iobuf);
+}
+
+bool HLSPusher::segment::is_downloaded()
+{
+    AutoLock _l(mutex);
+    return iobuf && size;
 }
 
 bool HLSPusher::segment::operator==(const segment &rhs) const
@@ -74,7 +79,6 @@ HLSPusher::hls_stream::hls_stream(int id, uint64_t bw, const char *url)
     current_key_path = NULL;
     memset(AES_IV, 0, AES_SIZE);
     iv_loaded = false;
-    pl_segment = 0;
 }
 
 HLSPusher::hls_stream::hls_stream(const hls_stream &rhs)
@@ -91,7 +95,6 @@ HLSPusher::hls_stream::hls_stream(const hls_stream &rhs)
     url = strdup_(rhs.url);
     memset(AES_IV, 0, AES_SIZE);
     iv_loaded = false;
-    pl_segment = 0;
 }
 
 HLSPusher::hls_stream::~hls_stream()
@@ -215,22 +218,16 @@ int HLSPusher::hls_stream::download_segment_key(stream_sys *sys, segment *seg)
     return 0;
 }
 
-int HLSPusher::hls_stream::download_segment_data(stream_sys *sys, segment *seg, int *cur_stream)
+int HLSPusher::hls_stream::download_segment_data(stream_sys *sys, segment *seg, int cur_stream)
 {
-    assert(seg);
-
     uint64_t duration_ = 0;
-    string segment_path;
 
     BEGIN
     AutoLock _l(seg->mutex);
 
-    if (!seg->lpath.empty() || (seg->iobuf && seg->size))
+    if (seg->is_downloaded()) {
         return 0;
-
-    char *tmp_encoded = (char *) base64_encode(seg->url, strlen(seg->url));
-    segment_path = sprintf_("%s%c%s", STR(sys->dir), DIRSEP, tmp_encoded);
-    SAFE_FREE(tmp_encoded);
+    }
 
     if (sys->bandwidth > 0 && bandwidth > 0) {
         uint64_t size = (seg->duration * bandwidth);
@@ -244,51 +241,47 @@ int HLSPusher::hls_stream::download_segment_data(stream_sys *sys, segment *seg, 
     uint64_t start = get_time_now();
     if (download(sys, seg) < 0) {
         LOGE("Downloading segment %d from stream %d failed",
-             seg->sequence, *cur_stream);
+             seg->sequence, cur_stream);
         return -1;
     }
     duration_ = get_time_now() - start;
 
-    File::flush_content(segment_path,
-                        GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "wb");
-    seg->lpath = segment_path;
-    SAFE_DELETE(seg->iobuf);
-
     LOGD("Downloaded segment(%s) from stream %d",
-         STR(seg->to_string()), *cur_stream);
+         STR(seg->to_string()), cur_stream);
 
-    if (decode_segment_data(sys, seg) < 0)
+    if (decode_segment_data(sys, seg) < 0) {
         return -1;
+    }
 
-    if (bandwidth == 0 && seg->duration > 0)
+    if (bandwidth == 0 && seg->duration > 0) {
         bandwidth = (uint64_t)(((double)seg->size * 8) / ((double)seg->duration));
+    }
     END
 
-    if (duration_)
-        sys->bandwidth = seg->size * 8 * 1000 / MAX((uint64_t) 1, duration_);
+    sys->bandwidth = seg->size * 8 * 1000 / MAX((uint64_t) 1, duration_);
     return 0;
 }
 
 int HLSPusher::hls_stream::download(stream_sys *sys, segment *seg)
 {
-    assert(seg);
+    if (seg->is_downloaded())
+        return 0;
 
-    if (!seg->iobuf || !seg->size) {
-        seg->iobuf = new IOBuffer;
+    seg->iobuf = new IOBuffer;
 
-        int curl_hls_timeout = DEFAULT_CURL_HLS_TIMEOUT;
-        bool curl_verbose = false;
-        if (sys->conf) {
-            GET_CONFIG_INT(sys->conf, curl_hls_timeout);
-            GET_CONFIG_BOOL(sys->conf, curl_verbose);
-        }
-        if (read_content_from_url(curl_hls_timeout, curl_verbose, true,
-                                  seg->url, seg->iobuf) < 0) {
-            SAFE_DELETE(seg->iobuf);
-            return -1;
-        }
-        seg->size = GETAVAILABLEBYTESCOUNT(*seg->iobuf);
+    int curl_hls_timeout = DEFAULT_CURL_HLS_TIMEOUT;
+    bool curl_verbose = false;
+    if (sys->conf) {
+        GET_CONFIG_INT(sys->conf, curl_hls_timeout);
+        GET_CONFIG_BOOL(sys->conf, curl_verbose);
     }
+    if (read_content_from_url(curl_hls_timeout, curl_verbose, true,
+                              seg->url, seg->iobuf) < 0) {
+        SAFE_DELETE(seg->iobuf);
+        return -1;
+    }
+
+    seg->size = GETAVAILABLEBYTESCOUNT(*seg->iobuf);
     return 0;
 }
 
@@ -305,10 +298,6 @@ HLSPusher::stream_sys::stream_sys(HLSPusher *pusher_) :
     reload_thrd(NULL), thrd(NULL),
     pusher(pusher_)
 {
-    char tempdir[] = "flvpusher-XXXXXX";
-    mkdtemp(tempdir);
-    dir = tempdir;
-
     memset(&playback, 0, sizeof(playback));
     memset(&playlist, 0, sizeof(playlist));
 }
@@ -332,8 +321,6 @@ HLSPusher::stream_sys::~stream_sys()
     }
 
     SAFE_FREE(m3u8);
-
-    rmdir_(dir);
 }
 
 HLSPusher::hls_stream *HLSPusher::stream_sys::get_hls(int wanted)
@@ -370,9 +357,9 @@ int HLSPusher::stream_sys::reload_playlist()
     LOGD("Reloading HLS live meta playlist(%s)", STR(pusher->m_input));
 
     if (get_http_live_meta_playlist(hls_streams) < 0) {
-        for (unsigned i = 0; i < hls_streams.size(); ++i)
+        for (unsigned i = 0; i < hls_streams.size(); ++i) {
             SAFE_DELETE(hls_streams[i]);
-        hls_streams.clear();
+        }
 
         LOGE("Reloading playlist failed");
         return -1;
@@ -386,15 +373,15 @@ int HLSPusher::stream_sys::reload_playlist()
         hls_stream *hls_old = find_hls(hls_new);
         if (!hls_old) {
             streams.push_back(hls_new);
-            LOGD("New HLS stream appended (id=%d, bandwidth=%llu ignored)",
+            LOGW("New HLS stream appended (id=%d, bandwidth=%llu ignored)",
                  hls_new->id, (long long unsigned) hls_new->bandwidth);
             continue;
-        } else if (update_playlist(hls_new, hls_old, &stream_appended) < 0)
+        } else if (update_playlist(hls_new, hls_old, &stream_appended) < 0) {
             LOGW("Failed updating HLS stream (id=%d, bandwidth=%llu)",
                  hls_new->id, (long long unsigned) hls_new->bandwidth);
+        }
         SAFE_DELETE(hls_new);
     }
-    hls_streams.clear();
 
     if (stream_appended) {
         AutoLock _l(download.mutex);
@@ -420,9 +407,9 @@ int HLSPusher::stream_sys::get_http_live_meta_playlist(vector<hls_stream *> &str
         streams.push_back(dst);
 
         auto_ptr<IOBuffer> iobuf(new IOBuffer);
-        if (read_m3u8_from_url(this, dst->url, iobuf.get()) < 0)
+        if (read_m3u8_from_url(this, dst->url, iobuf.get()) < 0) {
             err = -1;
-        else {
+        } else {
             iobuf->read_from_byte(0);
             err = parse_m3u8(this, streams,
                              GETIBPOINTER(*iobuf), GETAVAILABLEBYTESCOUNT(*iobuf));
@@ -438,7 +425,6 @@ int HLSPusher::stream_sys::update_playlist(hls_stream *hls_new, hls_stream *hls_
     LOGD("Updating hls stream (program-id=%d, bandwidth=%llu) has %d segments",
          hls_new->id, (long long unsigned) hls_new->bandwidth, count);
 
-    bool pl_located = false;
     AutoLock _l(hls_old->mutex);
     hls_old->max_segment_length = -1;
     for (int n = 0; n < count; ++n) {
@@ -451,18 +437,6 @@ int HLSPusher::stream_sys::update_playlist(hls_stream *hls_new, hls_stream *hls_
 
             assert(p->url);
             assert(seg->url);
-
-            if (!pl_located) {
-                for (unsigned i = hls_old->pl_segment;
-                     i < hls_old->segments.size();
-                     ++i) {
-                    if (hls_old->get_segment(i)->sequence == p->sequence) {
-                        hls_old->pl_segment = i;
-                        break;
-                    }
-                }
-                pl_located = true;
-            }
 
             if ((p->sequence != seg->sequence) ||
                 (p->duration != seg->duration) ||
@@ -479,8 +453,9 @@ int HLSPusher::stream_sys::update_playlist(hls_stream *hls_new, hls_stream *hls_
                 seg->url = strdup(p->url);
 
                 if ((p->key_path || p->key_loaded) &&
-                    seg->iobuf)
+                    seg->is_downloaded()) {
                     SAFE_DELETE(seg->iobuf);
+                }
                 SAFE_FREE(seg->key_path);
                 seg->key_path = strdup_(p->key_path);
             }
@@ -491,11 +466,6 @@ int HLSPusher::stream_sys::update_playlist(hls_stream *hls_new, hls_stream *hls_
             if (!l) {
                 SAFE_DELETE(p);
                 continue;
-            }
-
-            if (!pl_located) {
-                hls_old->pl_segment = hls_old->segments.size();
-                pl_located = true;
             }
 
             if (l->sequence + 1 != p->sequence) {
@@ -511,8 +481,6 @@ int HLSPusher::stream_sys::update_playlist(hls_stream *hls_new, hls_stream *hls_
         }
     }
 
-    if (pl_located && hls_old->pl_segment)
-        --hls_old->pl_segment;
     hls_old->sequence = hls_new->sequence;
     hls_old->duration = (hls_new->duration == -1) ? hls_old->duration : hls_new->duration;
     hls_old->cache = hls_new->cache;
@@ -583,7 +551,7 @@ int HLSPusher::prepare()
 
     m_sys->streams[current]->manage_segment_keys(m_sys);
 
-    if (prefetch(m_sys, &current) < 0) {
+    if (prefetch(m_sys, current) < 0) {
         LOGE("Prefetching segment(s) failed");
         return -1;
     }
@@ -592,7 +560,6 @@ int HLSPusher::prepare()
     m_sys->playback.stream = current;
 
     hls_stream *hls = m_sys->get_hls(current);
-    hls->pl_segment = m_sys->playback.segment;
     if (m_sys->live) {
         m_sys->playlist.last = get_time_now();
         m_sys->playlist.wakeup = m_sys->playlist.last + hls->duration*1000;
@@ -702,11 +669,11 @@ int HLSPusher::parse_m3u8(stream_sys *sys, vector<hls_stream *> &streams,
             if (!strncmp(line, "#EXT-X-STREAM-INF", 17)) {
                 sys->meta = true;
                 char *uri = read_line(begin, &read, end - begin);
-                if (!uri) err = -1;
-                else {
+                if (!uri) {
+                    err = -1;
+                } else {
                     if (*uri == '#') {
                         LOGW("Skipping invalid stream-inf: %s", uri);
-                        SAFE_FREE(uri);
                     } else {
                         bool new_stream_added = false;
                         hls_stream *hls = NULL;
@@ -714,8 +681,6 @@ int HLSPusher::parse_m3u8(stream_sys *sys, vector<hls_stream *> &streams,
                         if (!err) {
                             new_stream_added = true;
                         }
-
-                        SAFE_FREE(uri);
 
                         if (hls) {
                             auto_ptr<IOBuffer> iobuf(new IOBuffer);
@@ -742,16 +707,15 @@ int HLSPusher::parse_m3u8(stream_sys *sys, vector<hls_stream *> &streams,
                             }
                         }
                     }
+
+                    SAFE_FREE(uri);
                 }
 
                 begin = read;
             }
 
             SAFE_FREE(line);
-
-            if (begin >= end)
-                break;
-        } while (err == 0);
+        } while (err == 0 && begin < end);
 
         size_t stream_count = streams.size();
         if (stream_count) {
@@ -764,25 +728,21 @@ int HLSPusher::parse_m3u8(stream_sys *sys, vector<hls_stream *> &streams,
         LOGD("%s Playlist HLS protocol version: %d", sys->live ? "Live" : "VOD", version);
 
         hls_stream *hls = NULL;
-        if (sys->meta)
+        if (sys->meta) {
             hls = streams.back();
-        else {
+        } else {
             hls = new hls_stream(0, 0, sys->m3u8);
             streams.push_back(hls);
-            if (hls) {
-                p = (uint8_t *)strstr((const char *)buffer, "#EXT-X-TARGETDURATION:");
-                if (p) {
-                    uint8_t *rest = NULL;
-                    char *duration = read_line(p, &rest,  end - p);
-                    if (!duration) return -1;
-                    err = parse_target_duration(sys, hls, duration);
-                    SAFE_FREE(duration);
-                    p = NULL;
-                }
-
-                hls->version = version;
+            p = (uint8_t *)strstr((const char *)buffer, "#EXT-X-TARGETDURATION:");
+            if (p) {
+                uint8_t *rest = NULL;
+                char *duration = read_line(p, &rest,  end - p);
+                if (!duration) return -1;
+                err = parse_target_duration(sys, hls, duration);
+                SAFE_FREE(duration);
+                p = NULL;
             }
-            else return -1;
+            hls->version = version;
         }
         assert(hls);
 
@@ -793,37 +753,34 @@ int HLSPusher::parse_m3u8(stream_sys *sys, vector<hls_stream *> &streams,
             if (!line) break;
             begin = read;
 
-            if (!strncmp(line, "#EXTINF", 7))
+            if (!strncmp(line, "#EXTINF", 7)) {
                 err = parse_segment_information(hls, line, &segment_duration);
-            else if (!strncmp(line, "#EXT-X-TARGETDURATION", 21))
+            } else if (!strncmp(line, "#EXT-X-TARGETDURATION", 21)) {
                 err = parse_target_duration(sys, hls, line);
-            else if (!strncmp(line, "#EXT-X-MEDIA-SEQUENCE", 21)) {
+            } else if (!strncmp(line, "#EXT-X-MEDIA-SEQUENCE", 21)) {
                 if (!media_sequence_loaded) {
                     err = parse_media_sequence(sys, hls, line);
                     media_sequence_loaded = true;
                 }
-            } else if (!strncmp(line, "#EXT-X-KEY", 10))
+            } else if (!strncmp(line, "#EXT-X-KEY", 10)) {
                 err = parse_key(sys, hls, line);
-            else if (!strncmp(line, "#EXT-X-PROGRAM-DATE-TIME", 24))
+            } else if (!strncmp(line, "#EXT-X-PROGRAM-DATE-TIME", 24)) {
                 err = parse_program_date_time(sys, hls, line);
-            else if (!strncmp(line, "#EXT-X-ALLOW-CACHE", 18))
+            } else if (!strncmp(line, "#EXT-X-ALLOW-CACHE", 18)) {
                 err = parse_allow_cache(sys, hls, line);
-            else if (!strncmp(line, "#EXT-X-DISCONTINUITY", 20))
+            } else if (!strncmp(line, "#EXT-X-DISCONTINUITY", 20)) {
                 err = parse_discontinuity(sys, hls, line);
-            else if (!strncmp(line, "#EXT-X-VERSION", 14))
+            } else if (!strncmp(line, "#EXT-X-VERSION", 14)) {
                 err = parse_version(sys, hls, line);
-            else if (!strncmp(line, "#EXT-X-ENDLIST", 14))
+            } else if (!strncmp(line, "#EXT-X-ENDLIST", 14)) {
                 err = parse_end_list(sys, hls);
-            else if (strncmp(line, "#", 1) && (*line != '\0') ) {
+            } else if (strncmp(line, "#", 1) && (*line != '\0') ) {
                 err = parse_add_segment(hls, segment_duration, line);
                 segment_duration = -1;
             }
 
             SAFE_FREE(line);
-
-            if (begin >= end)
-                break;
-        } while (err == 0);
+        } while (err == 0 && begin < end);
 
         SAFE_FREE(line);
     }
@@ -1278,10 +1235,9 @@ int HLSPusher::choose_segment(stream_sys *sys, const int current)
     return wanted;
 }
 
-int HLSPusher::prefetch(stream_sys *sys, int *current)
+int HLSPusher::prefetch(stream_sys *sys, int current)
 {
-    int stream = *current;
-    hls_stream *hls = sys->get_hls(stream);
+    hls_stream *hls = sys->get_hls(current);
     if (!hls) return -1;
 
     if (!hls->get_segment_count()) {
@@ -1292,11 +1248,11 @@ int HLSPusher::prefetch(stream_sys *sys, int *current)
 
     unsigned segment_amount = (unsigned) (0.5f + 10/hls->duration);
     unsigned segment_count = hls->get_segment_count();
-    for (unsigned i = 0; i < MIN(segment_count, segment_amount); i++) {
+    for (unsigned i = 0; i < MIN(segment_count, segment_amount); ++i) {
         segment *seg = hls->get_segment(sys->download.segment);
         if (!seg) return -1;
 
-        if (!seg->lpath.empty() || (seg->iobuf && seg->size)) {
+        if (seg->is_downloaded()) {
             ++sys->download.segment;
             continue;
         }
@@ -1305,12 +1261,6 @@ int HLSPusher::prefetch(stream_sys *sys, int *current)
             return -1;
 
         ++sys->download.segment;
-
-        if (*current != stream) {
-            hls_stream *hls = sys->get_hls(*current);
-            if (!hls) return -1;
-            stream = *current;
-        }
     }
 
     return 0;
@@ -1389,7 +1339,7 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
         hls->mutex.unlock();
 
         if (seg &&
-            hls->download_segment_data(this, seg, &download.stream) < 0) {
+            hls->download_segment_data(this, seg, download.stream) < 0) {
             if (pusher->m_quit)
                 break;
             // Fall through
