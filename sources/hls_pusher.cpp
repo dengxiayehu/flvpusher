@@ -307,7 +307,7 @@ HLSPusher::stream_sys::~stream_sys()
     BEGIN
     AutoLock _l(download.mutex);
     download.segment = playback.segment = 0;
-    download.wait.signal();
+    download.wait.broadcast();
     END
 
     if (live) {
@@ -385,7 +385,7 @@ int HLSPusher::stream_sys::reload_playlist()
 
     if (stream_appended) {
         AutoLock _l(download.mutex);
-        download.wait.signal();
+        download.wait.broadcast();
         return 0;
     }
     return -1;
@@ -572,17 +572,71 @@ int HLSPusher::prepare()
 
 int HLSPusher::loop()
 {
+    int ret = 0;
+
+    Curl::init();
+
     if (prepare() < 0) {
         LOGE("HLSPusher's prepare() failed");
+        Curl::cleanup();
         return -1;
     }
     
     LOGI("Pushing hls \"%s\" ..", STR(m_input));
 
+    hls_stream *hls =
+        m_sys->get_hls(m_sys->playback.stream);
+    assert(hls);
+
     while (!m_quit) {
-        // TODO
-        sleep_(100);
+        BEGIN
+        AutoLock _l(m_sys->download.mutex);
+        while ((m_sys->download.segment <= m_sys->playback.segment) &&
+               !m_quit) {
+            m_sys->download.wait.wait();
+        }
+        END
+
+        if (m_quit)
+            break;
+
+        hls->mutex.lock();
+        segment *seg =
+            hls->get_segment(m_sys->playback.segment);
+        hls->mutex.unlock();
+
+        if (!seg->is_downloaded()) {
+            LOGW("Skip segment -- %s", STR(seg->to_string()));
+            short_snap(seg->duration*1000, &m_quit);
+            goto skip;
+        }
+
+        BEGIN
+        AutoLock _l(seg->mutex);
+        LOGD("Live segment -- %s", STR(seg->to_string()));
+        if (live_segment(seg) < 0) {
+            ret = -1;
+            break;
+        }
+        END
+
+skip:
+        AutoLock _l(m_sys->download.mutex);
+        if (++m_sys->playback.segment &&
+            (!m_sys->live &&
+             m_sys->playback.segment >= hls->get_segment_count())) {
+            break;
+        }
+        m_sys->download.wait.signal();
     }
+
+    m_quit = true;
+    Curl::cleanup();
+    return ret;
+}
+
+int HLSPusher::live_segment(segment *seg)
+{
     return 0;
 }
 
@@ -611,7 +665,7 @@ int HLSPusher::read_content_from_url(int timeout, bool verbose, bool trace_ascii
 int HLSPusher::read_m3u8_from_url(stream_sys *sys, const char *url, IOBuffer *iobuf)
 {
     int curl_hls_timeout = DEFAULT_CURL_HLS_TIMEOUT;
-    bool curl_verbose = true, curl_trace_ascii = false;
+    bool curl_verbose = false, curl_trace_ascii = true;
     if (sys->conf) {
         GET_CONFIG_INT(sys->conf, curl_hls_timeout);
         GET_CONFIG_BOOL(sys->conf, curl_verbose);
@@ -1024,7 +1078,7 @@ int HLSPusher::parse_key(stream_sys *sys, hls_stream *hls, char *read)
 int HLSPusher::parse_program_date_time(stream_sys *sys, hls_stream *hls, char *read)
 {
     UNUSED(hls);
-    LOGW("tag not supported: #EXT-X-PROGRAM-DATE-TIME %s", read);
+    LOGW("tag not supported: %s", read);
     return 0;
 }
 
@@ -1047,7 +1101,7 @@ int HLSPusher::parse_discontinuity(stream_sys *sys, hls_stream *hls, char *read)
 {
     assert(hls);
 
-    LOGW("#EXT-X-DISCONTINUITY %s", read);
+    LOGW("%s", read);
     return 0;
 }
 
@@ -1322,9 +1376,12 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
         int count = hls->get_segment_count();
         hls->mutex.unlock();
 
-        if (download.segment >= count) {
+        if ((!live && (playback.segment < (count - 6))) ||
+            (download.segment >= count)) {
             AutoLock _l(download.mutex);
-            while (download.segment >= count && !pusher->m_quit) {
+            while (((download.segment - playback.segment > 6) ||
+                    (download.segment >= count)) &&
+                   !pusher->m_quit) {
                 download.wait.wait();
                 if (live || pusher->m_quit)
                     break;
@@ -1346,7 +1403,10 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
         }
 
         AutoLock _l(download.mutex);
-        ++download.segment;
+        if (download.segment < count) {
+            ++download.segment;
+        }
+        download.wait.signal();
     }
 
     LOGD("hls_routine for \"%s\" ended", STR(pusher->m_input));

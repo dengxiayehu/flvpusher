@@ -14,7 +14,7 @@ public:
     HLSPusher(const std::string &input, RtmpHandler *&rtmp_hdl, xconfig::Config *conf);
     virtual ~HLSPusher();
 
-    int loop();
+    virtual int loop();
 
 private:
     enum { AES_SIZE = 16 };
@@ -86,7 +86,7 @@ private:
 
         struct hls_download {
             int stream;
-            int segment;
+            volatile int segment;
             xutil::RecursiveMutex mutex;
             xutil::Condition wait;
 
@@ -94,9 +94,8 @@ private:
         } download;
 
         struct hls_playback {
-            uint64_t offset;
             int stream;
-            int segment;
+            volatile int segment;
         } playback;
 
         struct hls_playlist {
@@ -104,10 +103,6 @@ private:
             uint64_t wakeup;
             int tries;
         } playlist;
-
-        struct hls_read {
-            xutil::RecursiveMutex mutex;
-        } read;
 
         bool cache;
         bool meta;
@@ -137,6 +132,7 @@ private:
 
 private:
     int prepare();
+    int live_segment(segment *seg);
 
     static int read_content_from_url(int timeout, bool verbose, bool trace_ascii,
                                      const char *url, xutil::IOBuffer *iobuf);

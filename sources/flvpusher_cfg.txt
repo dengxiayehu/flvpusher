@@ -1,4 +1,4 @@
 debug_level: DEBUG          # <ENUM> [DEBUG] {DEBUG, INFO, WARN, ERR}
-curl_timeout: 10            # <INTEGER> [10]
-curl_verbose: true          # <BOOL> [true]
+curl_hls_timeout: 20        # <INTEGER> [20]
+curl_verbose: false         # <BOOL> [true]
 curl_trace_ascii: true      # <BOOL> [true]
