@@ -590,13 +590,13 @@ int HLSPusher::loop()
     assert(hls);
 
     while (!m_quit) {
-        BEGIN
-        AutoLock _l(m_sys->download.mutex);
-        while ((m_sys->download.segment <= m_sys->playback.segment) &&
-               !m_quit) {
-            m_sys->download.wait.wait();
+        if (m_sys->download.segment <= m_sys->playback.segment) { // Quick check
+            AutoLock _l(m_sys->download.mutex);
+            while ((m_sys->download.segment <= m_sys->playback.segment) &&
+                   !m_quit) {
+                m_sys->download.wait.wait();
+            }
         }
-        END
 
         if (m_quit)
             break;
