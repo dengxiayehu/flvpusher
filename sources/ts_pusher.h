@@ -11,7 +11,7 @@ class TSParser;
 
 class TSPusher : public MediaPusher {
 public:
-    TSPusher(const std::string &input, RtmpHandler *&rtmp_hdl);
+    TSPusher(const std::string &input, RtmpHandler *&rtmp_hdl, bool hls_segment = false);
     virtual ~TSPusher();
 
     int loop();
@@ -33,6 +33,8 @@ private:
 
     uint32_t m_width;
     uint32_t m_height;
+
+    bool m_hls_segment;
 };
 
 }

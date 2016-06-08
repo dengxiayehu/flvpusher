@@ -17,7 +17,7 @@ public:
     TSParser();
     ~TSParser();
 
-    int set_file(const std::string &mp4_file);
+    int set_file(const std::string &mp4_file, bool hls_segment);
 
     int get_resolution(uint32_t &width, uint32_t &height);
 

@@ -20,24 +20,24 @@ MediaPusher::~MediaPusher()
     m_daf.close();
 }
 
-int MediaPusher::dump_video(const std::string &path)
+int MediaPusher::dump_video(const std::string &path, bool append)
 {
     if (path.empty()) return 0;
 
     if (m_dvf.is_opened())
         m_dvf.close();
 
-    return m_dvf.open(STR(path), "wb+") ? 0 : -1;
+    return m_dvf.open(STR(path), append ? "ab+" : "wb+") ? 0 : -1;
 }
 
-int MediaPusher::dump_audio(const std::string &path)
+int MediaPusher::dump_audio(const std::string &path, bool append)
 {
     if (path.empty()) return 0;
 
     if (m_daf.is_opened())
         m_daf.close();
 
-    return m_daf.open(STR(path), "wb+") ? 0 : -1;
+    return m_daf.open(STR(path), append ? "ab+" : "wb+") ? 0 : -1;
 }
 
 int MediaPusher::mux2ts(const std::string &tspath)

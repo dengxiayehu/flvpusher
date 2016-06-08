@@ -28,8 +28,8 @@ static CodecParser parsers[] = {
 AVRational av_mul_q(AVRational b, AVRational c)
 {
     av_reduce(&b.num, &b.den,
-            b.num * (int64_t) c.num,
-            b.den * (int64_t) c.den, INT_MAX);
+              b.num * (int64_t) c.num, b.den * (int64_t) c.den,
+              INT_MAX);
     return b;
 }
 
@@ -178,7 +178,7 @@ int64_t av_rescale_q_rnd(int64_t a, AVRational bq, AVRational cq, enum AVRoundin
 }
 
 void compute_frame_duration(FormatContext *s, int *pnum,
-        int *pden, Stream *st, CodecParserContext *pc, Packet *pkt)
+                            int *pden, Stream *st, CodecParserContext *pc, Packet *pkt)
 {
     int frame_size;
 
@@ -213,7 +213,7 @@ Stream *format_new_stream(FormatContext *s)
     if (s->nb_streams >= INT_MAX/sizeof(*streams))
         return NULL;
     streams = (Stream **) realloc(s->streams,
-            (s->nb_streams + 1) * sizeof(*streams));
+                                  (s->nb_streams + 1) * sizeof(*streams));
     if (!streams)
         return NULL;
     s->streams = streams;
@@ -234,11 +234,11 @@ Stream *format_new_stream(FormatContext *s)
 }
 
 void priv_set_pts_info(Stream *s, int pts_wrap_bits,
-        unsigned int pts_num, unsigned int pts_den)
+                       unsigned int pts_num, unsigned int pts_den)
 {
     if (pts_num <= 0 || pts_den <= 0) {
         LOGE("Ignoring attempt to set invalid timebase %d/%d for st:%d",
-                pts_num, pts_den, s->index);
+             pts_num, pts_den, s->index);
         return;
     }
     s->time_base.num = pts_num;
@@ -268,7 +268,7 @@ int has_codec_parameters(Stream *st)
 }
 
 Packet *add_to_pktbuf(PacketList **packet_buffer,
-        Packet *pkt, PacketList **plast_pktl)
+                      Packet *pkt, PacketList **plast_pktl)
 {
     PacketList *pktl = (PacketList *) calloc(1, sizeof(PacketList));
     if (!pktl)
@@ -286,8 +286,8 @@ Packet *add_to_pktbuf(PacketList **packet_buffer,
 }
 
 int read_from_packet_buffer(PacketList **pkt_buffer,
-        PacketList **pkt_buffer_end,
-        Packet      *pkt)
+                            PacketList **pkt_buffer_end,
+                            Packet      *pkt)
 {
     PacketList *pktl;
     assert(*pkt_buffer);
@@ -402,8 +402,8 @@ int parse_packet(FormatContext *s, Packet *pkt, int stream_index)
 
         bzero(&out_pkt, sizeof(out_pkt));
         len = parser_parse2(st->parser, st->codec,
-               &out_pkt.data, &out_pkt.size, data, size,
-               pkt->pts, pkt->dts, pkt->pos);
+                            &out_pkt.data, &out_pkt.size, data, size,
+                            pkt->pts, pkt->dts, pkt->pos);
 
         pkt->pts = pkt->dts = -1;
         pkt->pos = -1;
@@ -442,10 +442,10 @@ fail:
 }
 
 int parser_parse2(CodecParserContext *s,
-        CodecContext *avctx,
-        uint8_t **poutbuf, int *poutbuf_size,
-        const uint8_t *buf, int buf_size,
-        int64_t pts, int64_t dts, int64_t pos)
+                  CodecContext *avctx,
+                  uint8_t **poutbuf, int *poutbuf_size,
+                  const uint8_t *buf, int buf_size,
+                  int64_t pts, int64_t dts, int64_t pos)
 {
     int index;
     unsigned i;
@@ -482,7 +482,7 @@ int parser_parse2(CodecParserContext *s,
 
     // WARNING: the returned index can be negative
     index = s->parser->parser_parse(s, avctx, (const uint8_t **) poutbuf,
-            poutbuf_size, buf, buf_size);
+                                    poutbuf_size, buf, buf_size);
 
     // Update the file pointer
     if (*poutbuf_size) {
@@ -500,20 +500,20 @@ int parser_parse2(CodecParserContext *s,
 }
 
 void compute_pkt_fields(FormatContext *s, Stream *st,
-        CodecParserContext *pc, Packet *pkt)
+                        CodecParserContext *pc, Packet *pkt)
 {
     int num, den;
     AVRational duration;
 
-    duration = av_mul_q((AVRational) { pkt->duration, 1}, st->time_base);
+    duration = av_mul_q((AVRational) { pkt->duration, 1 }, st->time_base);
     if (pkt->duration == 0) {
         compute_frame_duration(s, &num, &den, st, pc, pkt);
         if (den && num) {
             duration = (AVRational) {num, den};
             pkt->duration = av_rescale_rnd(1,
-                    num * (int64_t) st->time_base.den,
-                    den * (int64_t) st->time_base.num,
-                    AV_ROUND_DOWN);
+                                           num * (int64_t) st->time_base.den,
+                                           den * (int64_t) st->time_base.num,
+                                           AV_ROUND_DOWN);
         }
     }
 
@@ -566,9 +566,9 @@ int aac_parse_init(CodecParserContext *s1)
 }
 
 int aac_parse(CodecParserContext *s1,
-        CodecContext *avctx,
-        const uint8_t **poutbuf, int *poutbuf_size,
-        const uint8_t *buf, int buf_size)
+              CodecContext *avctx,
+              const uint8_t **poutbuf, int *poutbuf_size,
+              const uint8_t *buf, int buf_size)
 {
     AACParseContext *s = (AACParseContext *) s1->priv_data;
     ParseContext *pc = &s->pc;
@@ -642,9 +642,9 @@ int h264_parse_init(CodecParserContext *s)
 }
 
 int h264_parse(CodecParserContext *s,
-        CodecContext *avctx,
-        const uint8_t **poutbuf, int *poutbuf_size,
-        const uint8_t *buf, int buf_size)
+               CodecContext *avctx,
+               const uint8_t **poutbuf, int *poutbuf_size,
+               const uint8_t *buf, int buf_size)
 {
     H264Context *h = (H264Context *) s->priv_data;
 
@@ -670,7 +670,7 @@ void h264_parse_close(CodecParserContext *s)
 }
 
 int aac_sync(uint64_t state, AACParseContext *hdr_info,
-        int *need_next_header, int *new_frame_start)
+             int *need_next_header, int *new_frame_start)
 {
 #define BSWAP16C(x) (((x) << 8 & 0xff00)  | ((x) >> 8 & 0x00ff))
 #define BSWAP32C(x) (BSWAP16C(x) << 16 | BSWAP16C((x) >> 16))
@@ -687,7 +687,7 @@ int aac_sync(uint64_t state, AACParseContext *hdr_info,
     bzero(&tmp, sizeof(tmp));
     tmp.u64 = BSWAP64C(state);
     init_get_bits(&bits,
-            tmp.u8+8-AAC_ADTS_HEADER_SIZE, AAC_ADTS_HEADER_SIZE*8);
+                  tmp.u8+8-AAC_ADTS_HEADER_SIZE, AAC_ADTS_HEADER_SIZE*8);
 
     if ((size = priv_aac_parse_header(&bits, &hdr)) < 0)
         return 0;
@@ -705,20 +705,21 @@ int aac_sync(uint64_t state, AACParseContext *hdr_info,
 }
 
 int combine_frame(ParseContext *pc, int next,
-        const uint8_t **buf, int *buf_size)
+                  const uint8_t **buf, int *buf_size)
 {
     if (pc->overread) {
 #ifdef DEBUG
         LOGD("overread %d, state:%X next:%d index:%d o_index:%d",
-                pc->overread, pc->state, next, pc->index, pc->overread_index);
+             pc->overread, pc->state, next, pc->index, pc->overread_index);
         LOGD("%X %X %X %X",
-                (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
+             (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
 #endif
     }
 
     // Copy overread bytes from last frame into buffer.
-    for (; pc->overread > 0; pc->overread--)
+    for (; pc->overread > 0; pc->overread--) {
         pc->buffer[pc->index++] = pc->buffer[pc->overread_index++];
+    }
 
     // Flush remaining if EOF
     if (!*buf_size && next == END_NOT_FOUND)
@@ -729,7 +730,7 @@ int combine_frame(ParseContext *pc, int next,
     // Copy into buffer end return
     if (next == END_NOT_FOUND) {
         void *new_buffer = realloc(pc->buffer,
-                *buf_size + pc->index + INPUT_BUFFER_PADDING_SIZE);
+                                   *buf_size + pc->index + INPUT_BUFFER_PADDING_SIZE);
 
         if (!new_buffer) {
             LOGE("realloc for pc->buffer failed: %s", ERRNOMSG);
@@ -748,7 +749,7 @@ int combine_frame(ParseContext *pc, int next,
     // Append to buffer
     if (pc->index) {
         void *new_buffer = realloc(pc->buffer,
-                next + pc->index + INPUT_BUFFER_PADDING_SIZE);
+                                   next + pc->index + INPUT_BUFFER_PADDING_SIZE);
         if (!new_buffer) {
             pc->overread_index =
             pc->index = 0;
@@ -757,8 +758,7 @@ int combine_frame(ParseContext *pc, int next,
         }
         pc->buffer = (uint8_t *) new_buffer;
         if (next > -INPUT_BUFFER_PADDING_SIZE)
-            memcpy(&pc->buffer[pc->index], *buf,
-                    next + INPUT_BUFFER_PADDING_SIZE);
+            memcpy(&pc->buffer[pc->index], *buf, next + INPUT_BUFFER_PADDING_SIZE);
         pc->index = 0;
         *buf      = pc->buffer;
     }
@@ -773,9 +773,9 @@ int combine_frame(ParseContext *pc, int next,
     if (pc->overread) {
 #ifdef DEBUG
         LOGD("overread %d, state:%X next:%d index:%d o_index:%d",
-                pc->overread, pc->state, next, pc->index, pc->overread_index);
+             pc->overread, pc->state, next, pc->index, pc->overread_index);
         LOGD("%X %X %X %X",
-                (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
+             (*buf)[0], (*buf)[1], (*buf)[2], (*buf)[3]);
 #endif
     }
 
@@ -826,8 +826,8 @@ int priv_aac_parse_header(GetBitContext *gbc, AACADTSHeaderInfo *hdr)
 }
 
 int parse_nal_units(CodecParserContext *s,
-        CodecContext *avctx,
-        const uint8_t * const buf, int buf_size)
+                    CodecContext *avctx,
+                    const uint8_t * const buf, int buf_size)
 {
     H264Context *h = (H264Context *) s->priv_data;
     int buf_index, next_avc;
@@ -856,7 +856,7 @@ int parse_nal_units(CodecParserContext *s,
         src_length = next_avc - buf_index;
 
         ptr = h264_decode_nal(h, buf + buf_index, &dst_length,
-                &consumed, src_length);
+                              &consumed, src_length);
         if (!ptr || dst_length < 0)
             break;
 
@@ -879,7 +879,7 @@ int parse_nal_units(CodecParserContext *s,
 }
 
 int find_start_code(const uint8_t *buf, int buf_size,
-        int buf_index, int next_avc)
+                    int buf_index, int next_avc)
 {
     uint32_t state = -1;
     const uint8_t *p = buf + buf_index,
@@ -920,7 +920,7 @@ found:
 }
 
 uint8_t *h264_decode_nal(H264Context *h, const uint8_t *src,
-        int *dst_length, int *consumed, int length)
+                         int *dst_length, int *consumed, int length)
 {
     int i, si, di;
     uint8_t *dst;
@@ -954,10 +954,10 @@ uint8_t *h264_decode_nal(H264Context *h, const uint8_t *src,
     uint32_t wanted_size = length + 256*1024 + INPUT_BUFFER_PADDING_SIZE;
     if (h->rbsp_buffer_size[bufidx] < wanted_size) {
         uint8_t *p = (uint8_t *) realloc(h->rbsp_buffer[bufidx],
-                wanted_size);
+                                         wanted_size);
         if (!p) {
             LOGE("realloc for rbsp_buffer[%d] failed: %s",
-                    bufidx, ERRNOMSG);
+                 bufidx, ERRNOMSG);
             return NULL;
         }
         memset(p, 0, wanted_size);
@@ -1006,7 +1006,7 @@ nsc:
 }
 
 int get_avc_nalsize(H264Context *h, const uint8_t *buf,
-        int buf_size, int *buf_index)
+                    int buf_size, int *buf_index)
 {
     int i, nalsize = 0;
 
@@ -1023,7 +1023,7 @@ int get_avc_nalsize(H264Context *h, const uint8_t *buf,
 }
 
 int av_compare_ts(int64_t ts_a, AVRational tb_a,
-        int64_t ts_b, AVRational tb_b)
+                  int64_t ts_b, AVRational tb_b)
 {
     int64_t a = tb_a.num * (int64_t)tb_b.den;
     int64_t b = tb_b.num * (int64_t)tb_a.den;
@@ -1107,7 +1107,7 @@ void update_stream_timings(FormatContext *ic)
         st = ic->streams[i];
         if (st->start_time != -1 && st->time_base.den) {
             start_time1 = av_rescale_q(st->start_time, st->time_base,
-                    AV_TIME_BASE_Q);
+                                       AV_TIME_BASE_Q);
             start_time = MIN(start_time, start_time1);
         }
     }
@@ -1126,12 +1126,12 @@ void estimate_timings(FormatContext *ic, off_t old_offset)
         UNUSED(st);
 #ifdef DEBUG
         LOGD("%d: start_time: %lf", i,
-                (double) st->start_time / AV_TIME_BASE);
+             (double) st->start_time / AV_TIME_BASE);
 #endif
     }
 #ifdef DEBUG
     LOGD("stream: start_time: %lf",
-            (double) ic->start_time / AV_TIME_BASE);
+         (double) ic->start_time / AV_TIME_BASE);
 #endif
 }
 
@@ -1143,7 +1143,7 @@ unsigned int choose_output(FormatContext *ic)
     for (unsigned i = 0; i < ic->nb_streams; ++i) {
         Stream *st = ic->streams[i];
         int opts = av_rescale_q(st->cur_dts, st->time_base,
-                AV_TIME_BASE_Q);
+                                AV_TIME_BASE_Q);
         if (opts < opts_min) {
             opts_min = opts;
             index = i;
@@ -1153,7 +1153,7 @@ unsigned int choose_output(FormatContext *ic)
 }
 
 int interleave_add_packet(FormatContext *s, Packet *pkt,
-        int (*compare)(FormatContext *, Packet *, Packet *))
+                          int (*compare)(FormatContext *, Packet *, Packet *))
 {
     PacketList **next_point, *this_pktl;
     Stream *st   = s->streams[pkt->stream_index];
@@ -1202,7 +1202,7 @@ int interleave_compare_dts(FormatContext *s, Packet *next,
     Stream *st  = s->streams[pkt->stream_index];
     Stream *st2 = s->streams[next->stream_index];
     int comp    = av_compare_ts(next->dts, st2->time_base, pkt->dts,
-            st->time_base);
+                                st->time_base);
 
     if (comp == 0)
         return pkt->stream_index < next->stream_index;
@@ -1244,15 +1244,15 @@ int read_frame_internal(FormatContext *s, Packet *pkt)
             cur_pkt.dts != -1 &&
             cur_pkt.pts < cur_pkt.dts) {
             LOGW("Invalid timestamps stream=%d, pts=%lld, dts=%lld, size=%d",
-                    cur_pkt.stream_index, cur_pkt.pts, cur_pkt.dts, cur_pkt.size);
+                 cur_pkt.stream_index, cur_pkt.pts, cur_pkt.dts, cur_pkt.size);
         }
 #ifdef XDEBUG
         LOGD("read_packet stream=%d, pts=%lld, dts=%lld, size=%d, duration=%d",
-                cur_pkt.stream_index,
-                cur_pkt.pts,
-                cur_pkt.dts,
-                cur_pkt.size,
-                cur_pkt.duration);
+             cur_pkt.stream_index,
+             cur_pkt.pts,
+             cur_pkt.dts,
+             cur_pkt.size,
+             cur_pkt.duration);
 #endif
 
         if (st->need_parsing) {
@@ -1260,7 +1260,7 @@ int read_frame_internal(FormatContext *s, Packet *pkt)
                 st->parser = parser_init(st->codec->codec_id);
                 if (!st->parser) {
                     LOGE("Parser not found for codec(codec_id:%d)",
-                            st->codec->codec_id);
+                         st->codec->codec_id);
                     return -1;
                 }
             }
@@ -1301,7 +1301,7 @@ int format_find_stream_info(FormatContext *ic)
 
 #ifdef XDEBUG
     LOGD("Before format_find_stream_info() pos: %lld",
-            old_offset);
+         old_offset);
 #endif
 
     for (i = 0; i < ic->nb_streams; ++i) {
@@ -1316,7 +1316,7 @@ int format_find_stream_info(FormatContext *ic)
             st->parser = parser_init(st->codec->codec_id);
             if (!st->parser && st->need_parsing) {
                 LOGE("Parser not found for codec(codec_id:%d)",
-                        st->codec->codec_id);
+                     st->codec->codec_id);
             }
         }
 
@@ -1359,7 +1359,7 @@ int format_find_stream_info(FormatContext *ic)
 
         if (read_size >= probesize) {
             LOGW("Probe buffer size limit of %lld bytes reached",
-                    probesize);
+                 probesize);
             break;
         }
 
@@ -1396,7 +1396,7 @@ int format_find_stream_info(FormatContext *ic)
 out:
 #ifdef XDEBUG
     LOGD("After format_find_stream_info() pos: %lld",
-            ic->file->cursor());
+         ic->file->cursor());
 #endif
     return ret;
 }
@@ -1413,7 +1413,7 @@ int process_input(FormatContext *ic, int stream_index)
 
 #ifdef XDEBUG
     LOGI("demuxer -> stream: %d pkt_pts:%lld, pkt_dts:%lld size:%d duration:%d pos:%lld",
-            pkt.stream_index, pkt.pts, pkt.dts, pkt.size, pkt.duration, pkt.pos);
+         pkt.stream_index, pkt.pts, pkt.dts, pkt.size, pkt.duration, pkt.pos);
 #endif
 
     if (pkt.dts != -1)
@@ -1423,7 +1423,7 @@ int process_input(FormatContext *ic, int stream_index)
 
 #ifdef XDEBUG
     LOGI("demuxer+ffmpeg -> stream: %d pkt_pts:%lld, pkt_dts:%lld size:%d duration:%d pos:%lld",
-            pkt.stream_index, pkt.pts, pkt.dts, pkt.size, pkt.duration, pkt.pos);
+         pkt.stream_index, pkt.pts, pkt.dts, pkt.size, pkt.duration, pkt.pos);
 #endif
 
     do_streamcopy(ic, &pkt);
@@ -1461,7 +1461,7 @@ void write_frame(FormatContext *ic, Packet *pkt)
 
 #ifdef XDEBUG
     LOGI("muxer <- stream: %d pkt_pts:%lld pkt_dts:%lld size:%d duration:%d pos:%lld",
-            pkt->stream_index, pkt->pts, pkt->dts, pkt->size, pkt->duration, pkt->pos);
+         pkt->stream_index, pkt->pts, pkt->dts, pkt->size, pkt->duration, pkt->pos);
 #endif
 
     ret = interleaved_write_frame(ic, pkt);
@@ -1479,7 +1479,7 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
     if (pkt->stream_index < 0 ||
         pkt->stream_index >= (int) ic->nb_streams) {
         LOGE("Invalid packet stream index: %d",
-                pkt->stream_index);
+             pkt->stream_index);
         return -1;
     }
 
@@ -1504,7 +1504,7 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
 
 #ifdef XDEBUG
         LOGI("opkt.stream_index=%d, opkt.pts=%lld",
-                opkt.stream_index, opkt.pts);
+             opkt.stream_index, opkt.pts);
 #endif
         if (ic->cb) {
             MediaType mt = ic->streams[opkt.stream_index]->codec->codec_type;
@@ -1529,7 +1529,7 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
 }
 
 int interleave_packet_per_dts(FormatContext *s, Packet *out,
-        Packet *pkt, int flush)
+                              Packet *pkt, int flush)
 {
     PacketList *pktl;
     unsigned stream_count = 0;
@@ -1560,8 +1560,8 @@ int interleave_packet_per_dts(FormatContext *s, Packet *out,
         Packet *top_pkt = &s->packet_buffer->pkt;
         int64_t delta_dts = INT64_MIN;
         int64_t top_dts = av_rescale_q(top_pkt->dts,
-                s->streams[top_pkt->stream_index]->time_base,
-                AV_TIME_BASE_Q);
+                                       s->streams[top_pkt->stream_index]->time_base,
+                                       AV_TIME_BASE_Q);
 
         for (i = 0; i < s->nb_streams; i++) {
             int64_t last_dts;
@@ -1571,8 +1571,8 @@ int interleave_packet_per_dts(FormatContext *s, Packet *out,
                 continue;
 
             last_dts = av_rescale_q(last->pkt.dts,
-                    s->streams[i]->time_base,
-                    AV_TIME_BASE_Q);
+                                    s->streams[i]->time_base,
+                                    AV_TIME_BASE_Q);
             delta_dts = MAX(delta_dts, last_dts - top_dts);
         }
 
@@ -1619,7 +1619,7 @@ int write_trailer(FormatContext *s)
 
 #ifdef XDEBUG
         LOGI("opkt.stream_index=%d, opkt.pts=%lld",
-                opkt.stream_index, opkt.pts);
+             opkt.stream_index, opkt.pts);
 #endif
 
         if (s->cb) {
@@ -1651,7 +1651,7 @@ int check_h264_startcode(const Packet *pkt)
 }
 
 const uint8_t *priv_find_start_code(const uint8_t *p, const uint8_t *end,
-        uint32_t *state)
+                                    uint32_t *state)
 {       
     int i; 
             

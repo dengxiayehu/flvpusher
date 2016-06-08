@@ -8,6 +8,7 @@
 namespace flvpusher {
 
 class RtmpHandler;
+class TSPusher;
 
 class HLSPusher : public MediaPusher {
 public:
@@ -15,6 +16,7 @@ public:
     virtual ~HLSPusher();
 
     virtual int loop();
+    virtual void ask2quit();
 
 private:
     enum { AES_SIZE = 16 };
@@ -162,6 +164,8 @@ private:
 private:
     xconfig::Config *m_conf;
     stream_sys *m_sys;
+    xutil::RecursiveMutex m_mutex;
+    TSPusher *m_ts_pusher;
 };
 
 }

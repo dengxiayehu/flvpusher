@@ -21,6 +21,7 @@ public:
 
 private:
     xfile::File *m_file;
+    int m_tm_offset;
 };
 
 }

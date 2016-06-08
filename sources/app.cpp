@@ -143,10 +143,14 @@ int App::parse_arg(int argc, char *argv[])
             break;
 
         case 'v':
+            if (is_file(optarg))
+                rm_(optarg);
             m_dvfile = optarg;
             break;
 
         case 'a':
+            if (is_file(optarg))
+                rm_(optarg);
             m_dafile = optarg;
             break;
 
@@ -167,6 +171,8 @@ int App::parse_arg(int argc, char *argv[])
             break;
 
         case 's':
+            if (is_file(optarg))
+                rm_(optarg);
             m_tspath = optarg;
             break;
 

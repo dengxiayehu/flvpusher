@@ -129,8 +129,7 @@ int RtmpHandler::disconnect()
     return 0;
 }
 
-int RtmpHandler::send_video(int32_t timestamp,
-                            byte *dat, uint32_t length)
+int RtmpHandler::send_video(int32_t timestamp, byte *dat, uint32_t length)
 {
     if (m_vparser->process(dat, length) < 0) {
         LOGE("Process video failed");
@@ -180,8 +179,7 @@ int RtmpHandler::send_video(int32_t timestamp,
 
         // Magic number guess it
         if (abs(shift_ts) <= NEW_STREAM_TIMESTAMP_THESHO*30) {
-            // Audio frame comes first after new stream starts
-            if (shift_ts > 0) {
+            if (shift_ts > 0) { // Audio frame comes first after new stream starts
                 // Shift video frame's timestamp
                 m_vinfo.tm_offset += shift_ts;
             } else {
@@ -206,8 +204,8 @@ int RtmpHandler::send_video(int32_t timestamp,
         if (m_vparser->is_key_frame()) {
             byte avc_dcr_body[2048];
             int body_len = make_avc_dcr_body(avc_dcr_body,
-                    m_vparser->get_sps(), m_vparser->get_sps_length(),
-                    m_vparser->get_pps(), m_vparser->get_pps_length());
+                                             m_vparser->get_sps(), m_vparser->get_sps_length(),
+                                             m_vparser->get_pps(), m_vparser->get_pps_length());
             if (!send_rtmp_pkt(RTMP_PACKET_TYPE_VIDEO,
                                timestamp+m_vinfo.tm_offset, avc_dcr_body, body_len)) {
                 LOGE("Send video avc_dcr to rtmpserver failed");
@@ -221,10 +219,9 @@ int RtmpHandler::send_video(int32_t timestamp,
     m_vinfo.lts = timestamp;
 
     int body_len = make_video_body(buf, cur-buf,
-            m_vparser->is_key_frame());
+                                   m_vparser->is_key_frame());
     if (!send_rtmp_pkt(RTMP_PACKET_TYPE_VIDEO,
-                       timestamp+m_vinfo.tm_offset,
-                       buf, body_len)) {
+                       timestamp+m_vinfo.tm_offset, buf, body_len)) {
         LOGE("Send video data to rtmpserver failed");
         return -1;
     }
@@ -290,8 +287,7 @@ int RtmpHandler::make_avc_dcr_body(byte *buf,
     return idx;
 }
 
-int RtmpHandler::send_audio(int32_t timestamp,
-                            byte *dat, uint32_t length)
+int RtmpHandler::send_audio(int32_t timestamp, byte *dat, uint32_t length)
 {
     if (m_aparser->process(dat, length) < 0) {
         LOGE("Process audio failed");
@@ -320,8 +316,7 @@ int RtmpHandler::send_audio(int32_t timestamp,
             int32_t shift_ts = laabs_ts - lvabs_ts;
 
             if (abs(shift_ts) <= NEW_STREAM_TIMESTAMP_THESHO*30) {
-                // Audio frame comes first after new stream starts
-                if (shift_ts > 0) {
+                if (shift_ts > 0) { // Audio frame comes first after new stream starts
                     // Shift video frame's timestamp
                     m_vinfo.tm_offset += shift_ts;
                 } else {
@@ -340,8 +335,7 @@ int RtmpHandler::send_audio(int32_t timestamp,
 
         // NOTE: asc-pkt's timestamp is always 0
         if (!send_rtmp_pkt(RTMP_PACKET_TYPE_AUDIO,
-                           timestamp+m_ainfo.tm_offset,
-                           asc_body, sizeof(asc_body))) {
+                           timestamp+m_ainfo.tm_offset, asc_body, sizeof(asc_body))) {
             LOGE("Send asc-pkt failed");
             m_ainfo.need_cfg = true;
             return -1;
@@ -357,8 +351,7 @@ int RtmpHandler::send_audio(int32_t timestamp,
     byte *buf = (byte *) m_mem_holder.alloc(length-7+2);
     int body_len = make_audio_body(dat+7, length-7, buf, length-7+2);
     if (!send_rtmp_pkt(RTMP_PACKET_TYPE_AUDIO,
-                       timestamp+m_ainfo.tm_offset,
-                       buf, body_len)) {
+                       timestamp+m_ainfo.tm_offset, buf, body_len)) {
         LOGE("Send audio data to rtmpserver failed");
         return -1;
     }
@@ -389,13 +382,13 @@ int RtmpHandler::make_audio_body(const byte *dat, uint32_t dat_len,
 
 byte RtmpHandler::pkttyp2channel(byte typ)
 {
-    if (typ == RTMP_PACKET_TYPE_VIDEO)
+    if (typ == RTMP_PACKET_TYPE_VIDEO) {
         return RTMP_VIDEO_CHANNEL;
-    else if (typ == RTMP_PACKET_TYPE_AUDIO ||
-             typ == RTMP_PACKET_TYPE_INFO)
+    } else if (typ == RTMP_PACKET_TYPE_AUDIO || typ == RTMP_PACKET_TYPE_INFO) {
         return RTMP_AUDIO_CHANNEL;
-    else
+    } else {
         return RTMP_SYSTEM_CHANNEL;
+    }
 }
 
 bool RtmpHandler::send_rtmp_pkt(int pkttype, uint32_t ts,

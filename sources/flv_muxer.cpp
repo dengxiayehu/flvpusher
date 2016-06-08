@@ -7,7 +7,7 @@ using namespace xutil;
 namespace flvpusher {
 
 FLVMuxer::FLVMuxer() :
-    m_file(NULL)
+    m_file(NULL), m_tm_offset(-1)
 {
     m_file = new xfile::File;
 }
@@ -37,8 +37,9 @@ bool FLVMuxer::is_opened() const
 
 const char *FLVMuxer::get_path() const
 {
-    if (is_opened())
+    if (is_opened()) {
         return m_file->get_path();
+    }
     return "";
 }
 
@@ -48,6 +49,11 @@ int FLVMuxer::write_tag(int typ, int ts, const uint8_t *buf, int buf_size)
         typ != RTMP_PACKET_TYPE_AUDIO &&
         typ != RTMP_PACKET_TYPE_INFO)
         return 0;
+
+    if (m_tm_offset == -1) {
+        m_tm_offset = -ts;
+    }
+    ts += m_tm_offset;
 
     m_file->writeui8(typ);
     m_file->writeui24(buf_size, true);

@@ -130,7 +130,7 @@ TSParser::~TSParser()
     ts_free(m_ts);
 }
 
-int TSParser::set_file(const std::string &mp4_file)
+int TSParser::set_file(const std::string &mp4_file, bool hls_segment)
 {
     if (!m_file.open(mp4_file, "rb"))
         return -1;
@@ -143,11 +143,13 @@ int TSParser::set_file(const std::string &mp4_file)
     if (format_find_stream_info(m_ts->stream) < 0)
         return -1;
 
-    int64_t timestamps = 0;
-    FormatContext *ic = m_ts->stream;
-    if (ic->start_time != -1)
-        timestamps += ic->start_time;
-    ic->ts_offset = 0 - timestamps;
+    if (!hls_segment) {
+        int64_t timestamps = 0;
+        FormatContext *ic = m_ts->stream;
+        if (ic->start_time != -1)
+            timestamps += ic->start_time;
+        ic->ts_offset = 0 - timestamps;
+    }
     return 0;
 }
 

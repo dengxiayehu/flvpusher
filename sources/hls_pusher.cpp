@@ -506,7 +506,7 @@ HLSPusher::hls_stream *HLSPusher::stream_sys::find_hls(hls_stream *hls_new)
 
 HLSPusher::HLSPusher(const string &input, RtmpHandler *&rtmp_hdl, Config *conf) :
     MediaPusher(input, rtmp_hdl),
-    m_conf(conf), m_sys(NULL)
+    m_conf(conf), m_sys(NULL), m_ts_pusher(NULL)
 {
 }
 
@@ -636,9 +636,19 @@ skip:
     return ret;
 }
 
+void HLSPusher::ask2quit()
+{
+    m_quit = true;
+    if (m_ts_pusher) {
+        m_ts_pusher->ask2quit();
+    }
+}
+
 int HLSPusher::live_segment(segment *seg)
 {
-    char tempts[] = "flvpusher-segment-XXXXXX";
+    char tempts[1024];
+    snprintf(tempts, sizeof(tempts),
+             "flvpusher-%s-XXXXXX", STR(basename_(seg->url)));
     if (mkstemp(tempts) < 0) {
         LOGE("mkstemp failed: %s", ERRNOMSG);
         return -1;
@@ -646,14 +656,21 @@ int HLSPusher::live_segment(segment *seg)
 
     File::flush_content(tempts,
                         GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "wb");
-    SAFE_DELETE(seg->iobuf);
 
     int ret = 0;
-    auto_ptr<MediaPusher> tspusher(new TSPusher(tempts, m_rtmp_hdl));
-    if (tspusher->loop() < 0) {
+    m_ts_pusher = new TSPusher(tempts, m_rtmp_hdl, true);
+    m_ts_pusher->dump_video(m_dvf.get_path(), true);
+    m_ts_pusher->dump_audio(m_daf.get_path(), true);
+    if (m_ts_pusher->loop() < 0) {
         ret = -1;
     }
+    if (!ret && !m_tspath.empty()) {
+        File::flush_content(m_tspath,
+                            GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "a");
+    }
     rm_(tempts);
+    SAFE_DELETE(seg->iobuf);
+    SAFE_DELETE(m_ts_pusher);
     return ret;
 }
 
@@ -668,15 +685,15 @@ int HLSPusher::read_content_from_url(int timeout, bool verbose, bool trace_ascii
         LOGE("Build GET for url \"%s\" failed", url);
         return -1;
     }
+    int ret = 0;
     if (curl->perform(req, NULL) < 0 ||
         req->response_code != 200) {
         LOGE("read_content_from_url(%s) failed (response_code=%d)",
              url, req->response_code);
-        Curl::request::recycle(&req);
-        return -1;
+        ret = -1;
     }
     Curl::request::recycle(&req);
-    return 0;
+    return ret;
 }
 
 int HLSPusher::read_m3u8_from_url(stream_sys *sys, const char *url, IOBuffer *iobuf)

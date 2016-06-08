@@ -120,9 +120,9 @@ struct CodecParser {
     int priv_data_size;
     int (*parser_init)(CodecParserContext *s);
     int (*parser_parse)(CodecParserContext *s,
-            CodecContext *avctx,
-            const uint8_t **poutbuf, int *poutbuf_size,
-            const uint8_t *buf, int buf_size);
+                        CodecContext *avctx,
+                        const uint8_t **poutbuf, int *poutbuf_size,
+                        const uint8_t *buf, int buf_size);
     void (*parser_close)(CodecParserContext *s);
     int (*split)(CodecContext *avctx, const uint8_t *buf, int buf_size);
 };
@@ -202,7 +202,7 @@ struct AACParseContext {
     int frame_size;
     int header_size;
     int (*sync) (uint64_t state, struct AACParseContext *hdr_info,
-            int *need_next_header, int *new_frame_start);
+                 int *need_next_header, int *new_frame_start);
     int channels;
     int sample_rate;
     int bit_rate;
@@ -254,20 +254,20 @@ int64_t av_rescale_q(int64_t a, AVRational bq, AVRational cq);
 int64_t av_rescale_q_rnd(int64_t a, AVRational bq, AVRational cq, enum AVRounding rnd);
 
 void compute_frame_duration(FormatContext *s, int *pnum,
-        int *pden, Stream *st, CodecParserContext *pc, Packet *pkt);
+                            int *pden, Stream *st, CodecParserContext *pc, Packet *pkt);
 
 Stream *format_new_stream(FormatContext *s);
 
 void priv_set_pts_info(Stream *s, int pts_wrap_bits,
-        unsigned int pts_num, unsigned int pts_den);
+                       unsigned int pts_num, unsigned int pts_den);
 
 int has_codec_parameters(Stream *st);
 
 Packet *add_to_pktbuf(PacketList **packet_buffer, Packet *pkt,
-        PacketList **plast_pktl);
+                      PacketList **plast_pktl);
 int read_from_packet_buffer(PacketList **pkt_buffer,
-        PacketList **pkt_buffer_end,
-        Packet      *pkt);
+                            PacketList **pkt_buffer_end,
+                            Packet      *pkt);
 void flush_packet_queue(FormatContext *s);
 void free_packet_buffer(PacketList **pkt_buf, PacketList **pkt_buf_end);
 
@@ -278,49 +278,49 @@ void parser_close(CodecParserContext *s);
 
 int parse_packet(FormatContext *s, Packet *pkt, int stream_index);
 int parser_parse2(CodecParserContext *s, CodecContext *avctx,
-        uint8_t **poutbuf, int *poutbuf_size,
-        const uint8_t *buf, int buf_size,
-        int64_t pts, int64_t dts, int64_t pos);
+                  uint8_t **poutbuf, int *poutbuf_size,
+                  const uint8_t *buf, int buf_size,
+                  int64_t pts, int64_t dts, int64_t pos);
 
 void compute_pkt_fields(FormatContext *s, Stream *st,
-        CodecParserContext *pc, Packet *pkt);
+                        CodecParserContext *pc, Packet *pkt);
 
 void fetch_timestamp(CodecParserContext *s, int off, int remove);
 
 int aac_parse_init(CodecParserContext *s1);
 int aac_parse(CodecParserContext *s1,
-        CodecContext *avctx,
-        const uint8_t **poutbuf, int *poutbuf_size,
-        const uint8_t *buf, int buf_size);
+              CodecContext *avctx,
+              const uint8_t **poutbuf, int *poutbuf_size,
+              const uint8_t *buf, int buf_size);
 int aac_sync(uint64_t state, AACParseContext *hdr_info,
-        int *need_next_header, int *new_frame_start);
+             int *need_next_header, int *new_frame_start);
 void aac_parse_close(CodecParserContext *s);
 
 int h264_parse_init(CodecParserContext *s);
 int h264_parse(CodecParserContext *s,
-        CodecContext *avctx,
-        const uint8_t **poutbuf, int *poutbuf_size,
-        const uint8_t *buf, int buf_size);
+               CodecContext *avctx,
+               const uint8_t **poutbuf, int *poutbuf_size,
+               const uint8_t *buf, int buf_size);
 void h264_parse_close(CodecParserContext *s);
 
 int combine_frame(ParseContext *pc, int next,
-        const uint8_t **buf, int *buf_size);
+                  const uint8_t **buf, int *buf_size);
 
 int priv_aac_parse_header(GetBitContext *gbc, AACADTSHeaderInfo *hdr);
 
 int parse_nal_units(CodecParserContext *s,
-        CodecContext *avctx,
-        const uint8_t * const buf, int buf_size);
+                    CodecContext *avctx,
+                    const uint8_t * const buf, int buf_size);
 
 int get_avc_nalsize(H264Context *h, const uint8_t *buf,
-        int buf_size, int *buf_index);
+                    int buf_size, int *buf_index);
 int find_start_code(const uint8_t *buf, int buf_size,
-        int buf_index, int next_avc);
+                    int buf_index, int next_avc);
 uint8_t *h264_decode_nal(H264Context *h, const uint8_t *src,
-        int *dst_length, int *consumed, int length);
+                         int *dst_length, int *consumed, int length);
 
 int av_compare_ts(int64_t ts_a, AVRational tb_a,
-        int64_t ts_b, AVRational tb_b);
+                  int64_t ts_b, AVRational tb_b);
 
 void frac_init(AVFrac *f, int64_t val, int64_t num, int64_t den);
 void frac_add(AVFrac *f, int64_t incr);
@@ -331,9 +331,9 @@ void estimate_timings(FormatContext *ic, off_t old_offset);
 
 unsigned int choose_output(FormatContext *ic);
 int interleave_add_packet(FormatContext *s, Packet *pkt,
-        int (*compare)(FormatContext *, Packet *, Packet *));
+                          int (*compare)(FormatContext *, Packet *, Packet *));
 int interleave_compare_dts(FormatContext *s, Packet *next,
-        Packet *pkt);
+                           Packet *pkt);
 
 int read_packet(FormatContext *s, Packet *pkt);
 int read_frame_internal(FormatContext *s, Packet *pkt);
@@ -345,12 +345,12 @@ void do_streamcopy(FormatContext *ic, Packet *pkt);
 void write_frame(FormatContext *ic, Packet *pkt);
 int interleaved_write_frame(FormatContext *ic, Packet *pkt);
 int interleave_packet_per_dts(FormatContext *ic, Packet *out,
-        Packet *pkt, int flush);
+                              Packet *pkt, int flush);
 int write_trailer(FormatContext *s);
 
 int check_h264_startcode(const Packet *pkt);
 const uint8_t *priv_find_start_code(const uint8_t *p, const uint8_t *end,
-        uint32_t *state);
+                                    uint32_t *state);
 
 }
 
