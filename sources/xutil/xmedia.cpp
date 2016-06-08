@@ -23,14 +23,14 @@ int Frame::make_frame(int32_t ts, byte *dat, uint32_t dat_len,
         }
 
         m_capacity = dat_len + 256;
-        {
+        BEGIN
         byte *tmp = (byte *) realloc(m_dat, m_capacity);
         if (!tmp) {
             LOGE("realloc for frame's content failed: %s", ERRNOMSG);
             return -1;
         }
         m_dat = tmp;
-        }
+        END
 
 copy:
         m_dat_len = dat_len;
@@ -84,7 +84,7 @@ void print_avc_dcr(const AVCDecorderConfigurationRecord &avc_dcr)
 /////////////////////////////////////////////////////////////
 
 int generate_asc(AudioSpecificConfig &asc,
-        uint8_t profile, uint8_t sample_rate_idx, uint8_t channel)
+                 uint8_t profile, uint8_t sample_rate_idx, uint8_t channel)
 {
     asc.dat[0] = profile<<3;
     asc.dat[0] |= (sample_rate_idx&0x0E)>>1;
@@ -94,15 +94,20 @@ int generate_asc(AudioSpecificConfig &asc,
 }
 
 int parse_asc(const AudioSpecificConfig &asc,
-        uint8_t &profile, uint8_t &sample_rate_idx, uint8_t &channel)
+              uint8_t &profile, uint8_t &sample_rate_idx, uint8_t &channel)
+{
+    return parse_asc(asc.dat, 2, profile, sample_rate_idx, channel);
+}
+int parse_asc(const uint8_t *buf, int len,
+              uint8_t &profile, uint8_t &sample_rate_idx, uint8_t &channel)
 {
     /* profile: 5bits
      * samplerateIndex: 4bits
      * channel: 4bits
      * reserved: 3bits */
-    profile = (asc.dat[0]&0xf8) >> 3;
-    sample_rate_idx = ((asc.dat[0]&0x07) << 1) + ((asc.dat[1]&0x80) >> 7);
-    channel = (asc.dat[1]&0x78) >> 3;
+    profile = (buf[0]&0xf8) >> 3;
+    sample_rate_idx = ((buf[0]&0x07) << 1) + ((buf[1]&0x80) >> 7);
+    channel = (buf[1]&0x78) >> 3;
     return 0;
 }
 
@@ -125,7 +130,7 @@ void print_asc(const AudioSpecificConfig &asc)
 }
 
 int generate_adts_header(const AudioSpecificConfig &asc,
-        uint32_t aac_len, byte adts_hdr[7])
+                         uint32_t aac_len, byte adts_hdr[7])
 {
     uint8_t profile, sample_rate_idx, channel;
 
@@ -146,7 +151,7 @@ int generate_adts_header(const AudioSpecificConfig &asc,
 }
 
 int generate_adts_header(const uint8_t asc_buf[2],
-        uint32_t aac_len, byte adts_hdr[7])
+                         uint32_t aac_len, byte adts_hdr[7])
 {
     AudioSpecificConfig asc;
     memcpy(asc.dat, asc_buf, 2);
@@ -230,14 +235,14 @@ static const uint8_t zigzag_scan[16+1] = {
 };
 
 static void decode_scaling_list(GetBitContext *gb, uint8_t *factors, int size,
-        const uint8_t *jvt_list,
-        const uint8_t *fallback_list)
+                                const uint8_t *jvt_list,
+                                const uint8_t *fallback_list)
 {   
     int i, last = 8, next = 8;
     const uint8_t *scan = size == 16 ? zigzag_scan : ff_zigzag_direct;
     if (!get_bits1(gb)) // Matrix not written, we use the predicted one
         memcpy(factors, fallback_list, size * sizeof(uint8_t));
-    else
+    else {
         for (i = 0; i < size; i++) {
             if (next)
                 next = (last + get_se_golomb(gb)) & 0xff;
@@ -247,6 +252,7 @@ static void decode_scaling_list(GetBitContext *gb, uint8_t *factors, int size,
             }
             last = factors[scan[i]] = next ? next : last;
         }
+    }
 } 
 
 static const uint8_t default_scaling4[2][16] = {
@@ -276,9 +282,9 @@ static const uint8_t default_scaling8[2][64] = {
 };
 
 static void decode_scaling_matrices(GetBitContext *gb, SPS *sps,
-        PPS *pps, int is_sps,
-        uint8_t(*scaling_matrix4)[16],
-        uint8_t(*scaling_matrix8)[64])
+                                    PPS *pps, int is_sps,
+                                    uint8_t(*scaling_matrix4)[16],
+                                    uint8_t(*scaling_matrix8)[64])
 {           
     int fallback_sps = !is_sps && sps->scaling_matrix_present;
     const uint8_t *fallback[4] = {
@@ -365,7 +371,7 @@ int h264_decode_sps(GetBitContext *gb, SPS *sps)
         sps->chroma_format_idc = get_ue_golomb_31(gb);
         if (sps->chroma_format_idc > 3) {
             LOGE("SPS: chroma_format_idc %u not supported",
-                    sps->chroma_format_idc);
+                 sps->chroma_format_idc);
             goto fail;
         } else if (sps->chroma_format_idc == 3) {
             sps->residual_color_transform_flag = get_bits1(gb);
@@ -382,12 +388,12 @@ int h264_decode_sps(GetBitContext *gb, SPS *sps)
         }
         if (sps->bit_depth_luma > 14 || sps->bit_depth_chroma > 14) {
             LOGE("SPS: illegal bit depth value (%d, %d)\n",
-                    sps->bit_depth_luma, sps->bit_depth_chroma);
+                 sps->bit_depth_luma, sps->bit_depth_chroma);
             goto fail;
         }
         sps->transform_bypass = get_bits1(gb);
         decode_scaling_matrices(gb, sps, NULL, 1,
-                sps->scaling_matrix4, sps->scaling_matrix8);
+                                sps->scaling_matrix4, sps->scaling_matrix8);
     } else {
         sps->chroma_format_idc = 1;
         sps->bit_depth_luma    = 8;
@@ -398,7 +404,7 @@ int h264_decode_sps(GetBitContext *gb, SPS *sps)
     if (log2_max_frame_num_minus4 < MIN_LOG2_MAX_FRAME_NUM - 4 ||
         log2_max_frame_num_minus4 > MAX_LOG2_MAX_FRAME_NUM - 4) {
         LOGE("SPS: log2_max_frame_num_minus4 out of range (0-12): %d",
-                log2_max_frame_num_minus4);
+             log2_max_frame_num_minus4);
         goto fail;
     }
     sps->log2_max_frame_num = log2_max_frame_num_minus4 + 4;

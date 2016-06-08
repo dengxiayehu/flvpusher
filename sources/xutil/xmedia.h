@@ -21,7 +21,7 @@ class Frame {
 public:
     Frame();
     int make_frame(int32_t ts, byte *dat, uint32_t dat_len,
-            bool reuse_dat=false);
+                   bool reuse_dat=false);
     void clear();
     ~Frame();
 
@@ -56,15 +56,17 @@ struct AudioSpecificConfig {
     byte dat[2];
 };
 int generate_asc(AudioSpecificConfig &asc,
-        uint8_t profile, uint8_t sample_rate_idx, uint8_t channel);
+                 uint8_t profile, uint8_t sample_rate_idx, uint8_t channel);
 int parse_asc(const AudioSpecificConfig &asc,
-        uint8_t &profile, uint8_t &sample_rate_idx, uint8_t &channel);
+              uint8_t &profile, uint8_t &sample_rate_idx, uint8_t &channel);
+int parse_asc(const uint8_t *buf, int len,
+              uint8_t &profile, uint8_t &sample_rate_idx, uint8_t &channel);
 void print_asc(const AudioSpecificConfig &asc);
 
 int generate_adts_header(const AudioSpecificConfig &asc,
-        uint32_t aac_len, byte adts_hdr[7]);
+                         uint32_t aac_len, byte adts_hdr[7]);
 int generate_adts_header(const uint8_t asc_buf[2],
-        uint32_t aac_len, byte adts_hdr[7]);
+                         uint32_t aac_len, byte adts_hdr[7]);
 
 int str_to_audioprof(const char *str);
 const char *audioprof_to_str(int aprof);

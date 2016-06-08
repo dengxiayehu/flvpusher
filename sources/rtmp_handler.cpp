@@ -19,6 +19,7 @@
 //#define XDEBUG_TIMESTAMP
 
 using namespace xutil;
+using namespace xmedia;
 
 namespace flvpusher {
 
