@@ -1,6 +1,6 @@
 README for the flvpusher
 ===============================
-A tool for pushing flv/mp4/ts/rtmp/rtsp source to rtmpserver.
+A tool for pushing flv/mp4/ts/rtmp/rtsp/hls source to rtmpserver.
 Compile it on a Linux operating system.
 
 Compile
