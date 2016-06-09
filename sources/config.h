@@ -1,6 +1,8 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
+extern char abs_program[];
+
 #define VERSION                 2
 
 #define INPUT_SEPARATOR         ","
@@ -17,5 +19,7 @@
 #define DEFAULT_CFG_FILE            "./flvpusher_cfg.txt"
 
 #define DEFAULT_CURL_HLS_TIMEOUT    20
+
+#define DEFAULT_DOCUMENT_ROOT       "."
 
 #endif /* end of _CONFIG_H_ */

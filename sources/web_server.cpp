@@ -5,6 +5,7 @@
 #include <xcurl.h>
 
 #include "web_server.h"
+#include "config.h"
 
 #define IMPL(x) ((WebServerImpl *) (x))
 
@@ -72,9 +73,6 @@ int WebServerImpl::start(int listen_port, int server_threads)
         return -1;
     }
 
-    BEGIN
-    AutoLock _l(m_mutex);
-
     if (!m_serve_param.empty()) {
         LOGE("WebServer already started");
         return -1;
@@ -90,25 +88,24 @@ int WebServerImpl::start(int listen_port, int server_threads)
         m_serve_param.push_back(sp);
     }
 
-    const char *root = m_conf->get_config("document_root");
-    if (!root) root = ".";
-    if (!is_dir(root) && mkdir(root, 0755) != 0) {
-        LOGE("Create document_root dir \"%s\" failed: %s",
-             root, ERRNOMSG);
-        return -1;
+    string document_root = DEFAULT_DOCUMENT_ROOT;
+    if (m_conf) {
+        GET_CONFIG_STRING(m_conf, document_root);
+    }
+    if (!is_dir(document_root)) {
+        system_("mkdir -p %s", STR(document_root));
     }
 
     char *options[kMaxOptions] = { NULL };
-    set_option(options, "document_root", root);
+    set_option(options, "document_root", STR(document_root));
     set_option(options, "listening_port", STR(sprintf_("%d", listen_port)));
 
-    char *program = m_conf->get_config("program");
-    set_absolute_path(options, "document_root", program);
-    set_absolute_path(options, "dav_auth_file", program);
-    set_absolute_path(options, "cgi_interpreter", program);
-    set_absolute_path(options, "access_log_file", program);
-    set_absolute_path(options, "global_auth_file", program);
-    set_absolute_path(options, "ssl_certificate", program);
+    set_absolute_path(options, "document_root", abs_program);
+    set_absolute_path(options, "dav_auth_file", abs_program);
+    set_absolute_path(options, "cgi_interpreter", abs_program);
+    set_absolute_path(options, "access_log_file", abs_program);
+    set_absolute_path(options, "global_auth_file", abs_program);
+    set_absolute_path(options, "ssl_certificate", abs_program);
 
     verify_existence(options, "document_root", true);
     verify_existence(options, "cgi_interpreter", false);
@@ -130,12 +127,11 @@ int WebServerImpl::start(int listen_port, int server_threads)
         SAFE_FREE(options[i + 1]);
     }
 
-    chdir(root);
+    chdir(STR(document_root));
 
     for (int i = 1; i < server_threads; ++i) {
         mg_copy_listeners(m_serve_param[0]->server, m_serve_param[i]->server);
     }
-    END
 
     FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
         (*it)->thread_id = mg_start_thread(serve, *it);
