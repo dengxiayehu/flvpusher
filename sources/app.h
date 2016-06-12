@@ -41,7 +41,7 @@ private:
     int init();
     void cleanup();
 
-    int load_cfg(const char *cfg_file = DEFAULT_CFG_FILE);
+    int load_cfg(std::string cfg_file = DEFAULT_CFG_FILE);
     int parse_arg(int argc, char *argv[]);
     int check_arg() const;
     void usage() const;
@@ -56,6 +56,7 @@ private:
 
     std::string m_input_str;
     std::string m_liveurl;
+    bool m_webserver;
     std::string m_dvfile;
     std::string m_dafile;
     std::string m_hls_playlist;

@@ -2,3 +2,6 @@ debug_level: DEBUG          # <ENUM> [DEBUG] {DEBUG, INFO, WARN, ERR}
 curl_hls_timeout: 20        # <INTEGER> [20]
 curl_verbose: false         # <BOOL> [true]
 curl_trace_ascii: true      # <BOOL> [true]
+listen_port: 9877           # <INTEGER> [9877] {1024~65535}
+server_threads : 5          # <INTEGER> [5] {1~24}
+document_root: ./html       # <STRING> [./html]

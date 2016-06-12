@@ -17,6 +17,7 @@
 #include "hls_pusher.h"
 #include "rtmp_source.h"
 #include "rtsp_source.h"
+#include "web_server.h"
 #include "hls_segmenter.h"
 #include "rtmp_handler.h"
 
@@ -33,6 +34,7 @@ static int on_config_change(const char *conf_name, const char *value, void *user
 
 App::App() :
     m_sig_hdl(Signaler::get_instance()),
+    m_webserver(false),
     m_hls_time(5), m_hls_list_size(INT32_MAX),
     m_loop(false),
     m_rtmp_hdl(NULL),
@@ -94,14 +96,18 @@ void App::ask2quit()
         m_hls->ask2quit();
 }
 
-int App::load_cfg(const char *cfg_file)
+int App::load_cfg(std::string cfg_file)
 {
+    if (!is_path_absolute(STR(cfg_file))) {
+        cfg_file = sprintf_("%s%c%s",
+                            STR(dirname_(abs_program)), DIRSEP, STR(cfg_file));
+    }
     if (!is_file(cfg_file)) {
         // It's ok if config file is missing
         return 0;
     }
 
-    m_conf = create_config(cfg_file);
+    m_conf = create_config(STR(cfg_file));
     if (!m_conf) {
         LOGE("create config failed");
         return -1;
@@ -127,12 +133,13 @@ int App::parse_arg(int argc, char *argv[])
         {"tspath",          required_argument, NULL, 's'},
         {"flvpath",         required_argument, NULL, 'f'},
         {"no_logfile",      no_argument,       NULL, 'N'},
+        {"webserver",       no_argument,       NULL, 'w'},
         {0, 0, 0, 0}
     };
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:z:c:Nf:W;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:z:c:Nf:wW;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -188,6 +195,10 @@ int App::parse_arg(int argc, char *argv[])
             no_logfile = true;
             break;
 
+        case 'w':
+            m_webserver = true;
+            break;
+
         case 'h':
             usage();
             cleanup();
@@ -222,6 +233,10 @@ int App::parse_arg(int argc, char *argv[])
 
 int App::check_arg() const
 {
+    if (m_webserver) {
+        return 0;
+    }
+
     if (m_req_tspath.empty()) {
         if (m_input_str.empty()) {
             LOGE("No input url specified");
@@ -233,13 +248,13 @@ int App::check_arg() const
             LOGE("'--hls_playlist' and '-L' can't be both set or empty");
             return -1;
         }
-    }
 
-    if (!m_hls_playlist.empty()) {
-        if (m_hls_time < 0 || m_hls_list_size < 0) {
-            LOGE("Invalid value of hls_time(%d) or hls_list_size(%d)",
-                 m_hls_time, m_hls_list_size);
-            return -1;
+        if (!m_hls_playlist.empty()) {
+            if (m_hls_time < 0 || m_hls_list_size < 0) {
+                LOGE("Invalid value of hls_time(%d) or hls_list_size(%d)",
+                        m_hls_time, m_hls_list_size);
+                return -1;
+            }
         }
     }
 
@@ -248,7 +263,7 @@ int App::check_arg() const
 
 void App::usage() const
 {
-    fprintf(stderr, "Usage: flvpusher <-i media_file> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]|[-c request-tspath]> [-h] [--no_logfile]\n");
+    fprintf(stderr, "Usage: flvpusher <-i media_file|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]|[-c request-tspath]> [-h] [--no_logfile]\n");
     fprintf(stderr, "Version: %d\n", VERSION);
 }
 
@@ -274,6 +289,35 @@ int App::main(int argc, char *argv[])
         return 1;
     }
 
+    int ret = 0;
+
+    if (m_webserver) {
+        std::auto_ptr<WebServer> webserver(new WebServer(m_conf));
+
+        int listen_port = DEFAULT_LISTEN_PORT,
+            server_threads = DEFAULT_SERVER_THREADS;
+        if (m_conf) {
+            GET_CONFIG_INT(m_conf, listen_port);
+            GET_CONFIG_INT(m_conf, server_threads);
+        }
+
+        if (webserver->start(listen_port, server_threads) < 0) {
+            LOGE("Start webserver failed");
+            return -1;
+        }
+
+        while (!m_quit) {
+            if (webserver->pulse() < 0) {
+                ret = -1;
+                break;
+            }
+            short_snap(1000, &m_quit);
+        }
+
+        webserver->stop();
+        return ret;
+    }
+
     if (prepare() < 0) {
        return -1;
     }
@@ -292,7 +336,7 @@ int App::main(int argc, char *argv[])
                 m_hls_time,     // Desired ts-segment's duration
                 m_hls_list_size // Max# of ts-segments
                 );
-        int ret = m_hls->set_file(input[0], m_loop);
+        ret = m_hls->set_file(input[0], m_loop);
         if (ret < 0)
             return ret;
         return m_loop ? m_hls->loop() : 0;

@@ -22,6 +22,7 @@ public:
     virtual ~WebServerImpl();
 
     int start(int listen_port, int server_threads);
+    int pulse();
     int stop();
 
     static int send_response(struct mg_connection *conn, const char *code_desc,
@@ -32,9 +33,6 @@ private:
     enum { kMaxOptions = 100 };
     static void set_option(char **options, const char *name, const char *value);
     static char *get_option(char **options, const char *option_name);
-    static int is_path_absolute(const char *path);
-    static void set_absolute_path(char *options[], const char *option_name,
-                                  const char *program);
     static bool verify_existence(char **options, const char *name, bool dir);
     static int ev_handler(struct mg_connection *conn, enum mg_event ev);
     struct ServeParam {
@@ -69,12 +67,8 @@ int WebServerImpl::start(int listen_port, int server_threads)
 {
     if (listen_port < 1024 || listen_port > 65535 ||
         server_threads < 1) {
-        LOGE("Invalid start param (%d,%d)", listen_port, server_threads);
-        return -1;
-    }
-
-    if (!m_serve_param.empty()) {
-        LOGE("WebServer already started");
+        LOGE("Failed to start webserver (listen_port=%d,server_threads=%d)",
+             listen_port, server_threads);
         return -1;
     }
 
@@ -92,6 +86,10 @@ int WebServerImpl::start(int listen_port, int server_threads)
     if (m_conf) {
         GET_CONFIG_STRING(m_conf, document_root);
     }
+    if (!is_path_absolute(STR(document_root))) {
+        document_root = sprintf_("%s%c%s",
+                                 STR(dirname_(abs_program)), DIRSEP, STR(document_root));
+    }
     if (!is_dir(document_root)) {
         system_("mkdir -p %s", STR(document_root));
     }
@@ -100,16 +98,7 @@ int WebServerImpl::start(int listen_port, int server_threads)
     set_option(options, "document_root", STR(document_root));
     set_option(options, "listening_port", STR(sprintf_("%d", listen_port)));
 
-    set_absolute_path(options, "document_root", abs_program);
-    set_absolute_path(options, "dav_auth_file", abs_program);
-    set_absolute_path(options, "cgi_interpreter", abs_program);
-    set_absolute_path(options, "access_log_file", abs_program);
-    set_absolute_path(options, "global_auth_file", abs_program);
-    set_absolute_path(options, "ssl_certificate", abs_program);
-
     verify_existence(options, "document_root", true);
-    verify_existence(options, "cgi_interpreter", false);
-    verify_existence(options, "ssl_certificate", false);
 
     for (int i = 0; options[i]; i += 2) {
         FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
@@ -127,7 +116,11 @@ int WebServerImpl::start(int listen_port, int server_threads)
         SAFE_FREE(options[i + 1]);
     }
 
-    chdir(STR(document_root));
+    if (chdir(STR(document_root)) < 0) {
+        LOGE("chdir to document_root \"%s\" failed: %s",
+             STR(document_root), ERRNOMSG);
+        return -1;
+    }
 
     for (int i = 1; i < server_threads; ++i) {
         mg_copy_listeners(m_serve_param[0]->server, m_serve_param[i]->server);
@@ -142,10 +135,20 @@ int WebServerImpl::start(int listen_port, int server_threads)
     return 0;
 }
 
+int WebServerImpl::pulse() {
+    return 0;
+}
+
 int WebServerImpl::stop()
 {
     if (!m_quit) {
         m_quit = true;
+
+        FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
+            mg_wakeup_server((*it)->server);
+        }
+
+        sleep_(200);
 
         FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
             mg_destroy_server(&(*it)->server);
@@ -187,34 +190,6 @@ char *WebServerImpl::get_option(char **options, const char *option_name)
     }
 
     return NULL;
-}
-
-int WebServerImpl::is_path_absolute(const char *path)
-{
-    return path && path[0] == '/';
-}
-
-void WebServerImpl::set_absolute_path(char *options[], const char *option_name,
-                                      const char *program)
-{
-    char path[PATH_MAX], abs[PATH_MAX], *option_value;
-    const char *p;
-
-    option_value = get_option(options, option_name);
-    if (option_value && !is_path_absolute(option_value)) {
-        if (!(p = strrchr(program, DIRSEP))) {
-            getcwd(path, sizeof(path));
-        } else {
-            snprintf(path, sizeof(path), "%.*s", (int) (p - program),
-                     program);
-        }
-
-        strncat(path, "/", sizeof(path) - 1);
-        strncat(path, option_value, sizeof(path) - 1);
-
-        ABS_PATH(path, abs, sizeof(abs));
-        set_option(options, option_name, abs);
-    }
 }
 
 bool WebServerImpl::verify_existence(char **options, const char *name, bool dir)
@@ -314,6 +289,10 @@ WebServer::~WebServer()
 int WebServer::start(int listen_port, int server_threads)
 {
     return IMPL(m_impl)->start(listen_port, server_threads);
+}
+
+int WebServer::pulse() {
+    return IMPL(m_impl)->pulse();
 }
 
 int WebServer::stop()

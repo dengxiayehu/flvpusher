@@ -12,6 +12,7 @@ public:
     ~WebServer();
 
     int start(int listen_port, int server_threads);
+    int pulse();
     int stop();
 
     static int send_response(struct mg_connection *conn, const char *code_desc,

@@ -453,6 +453,11 @@ void rm_(const std::string &path)
     system_(STR(sprintf_("rm -rf %s", STR(path))));
 }
 
+int is_path_absolute(const char *path)
+{
+    return path && path[0] == '/';
+}
+
 /////////////////////////////////////////////////////////////
 
 Mutex::Mutex(MutexType typ)

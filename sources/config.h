@@ -20,6 +20,8 @@ extern char abs_program[];
 
 #define DEFAULT_CURL_HLS_TIMEOUT    20
 
-#define DEFAULT_DOCUMENT_ROOT       "."
+#define DEFAULT_LISTEN_PORT         9877
+#define DEFAULT_SERVER_THREADS      5
+#define DEFAULT_DOCUMENT_ROOT       "./html"
 
 #endif /* end of _CONFIG_H_ */

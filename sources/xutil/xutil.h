@@ -122,6 +122,8 @@ char *strdup_(const char *s);
 
 void rm_(const std::string &path);
 
+int is_path_absolute(const char *path);
+
 /////////////////////////////////////////////////////////////
 
 class Condition;
