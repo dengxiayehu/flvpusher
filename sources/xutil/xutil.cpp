@@ -458,6 +458,17 @@ int is_path_absolute(const char *path)
     return path && path[0] == '/';
 }
 
+TagType get_tag_mask(TagType tag)
+{
+    TagType result = 0xffffffffffffffffLL;
+    for (int8_t i = 56; i >= 0; i -= 8) {
+        if (((tag >> i)&0xff) == 0)
+            break;
+        result = result >> 8;
+    }
+    return ~result;
+}
+
 /////////////////////////////////////////////////////////////
 
 Mutex::Mutex(MutexType typ)
@@ -915,6 +926,38 @@ using namespace std;
 IOBuffer::operator std::string()
 {
     return to_string(0, 0);
+}
+
+/////////////////////////////////////////////////////////////
+
+AutoFileLock::AutoFileLock(const std::string &flock_path) :
+    m_flock_path(flock_path)
+{
+    m_fd = open(STR(m_flock_path), O_RDWR|O_CREAT,
+                S_IRWXU|S_IRWXG|S_IRWXO);
+    if (m_fd < 0) {
+        LOGE("Open file lock \"%s\" failed: %s",
+             STR(m_flock_path), ERRNOMSG);
+        return;
+    }
+
+    if (flock(m_fd, LOCK_EX) < 0) {
+        LOGE("Lock file lock \"%s\" failed: %s",
+             STR(m_flock_path), ERRNOMSG);
+        SAFE_CLOSE(m_fd);
+        return;
+    }
+}
+
+AutoFileLock::~AutoFileLock()
+{
+    if (m_fd >= 0) {
+        if (flock(m_fd, LOCK_UN) < 0) {
+            LOGE("Unlock lock file \"%s\" failed: %s",
+                 STR(m_flock_path), ERRNOMSG);
+        }
+        SAFE_CLOSE(m_fd);
+    }
 }
 
 }

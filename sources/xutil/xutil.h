@@ -124,6 +124,10 @@ void rm_(const std::string &path);
 
 int is_path_absolute(const char *path);
 
+typedef uint64_t TagType;
+#define TAG_KIND_OF(tag,kind) ((bool)(((tag)&get_tag_mask((kind)))==(kind)))
+TagType get_tag_mask(TagType tag);
+
 /////////////////////////////////////////////////////////////
 
 class Condition;
@@ -334,6 +338,18 @@ private:
 
 private:
     DISALLOW_COPY_AND_ASSIGN(IOBuffer);
+};
+
+/////////////////////////////////////////////////////////////
+
+class AutoFileLock {
+public:
+    AutoFileLock(const std::string &flock_path);
+    ~AutoFileLock();
+
+private:
+    int  m_fd;
+    std::string m_flock_path;
 };
 
 }

@@ -5,6 +5,8 @@
 #include <xcurl.h>
 
 #include "web_server.h"
+#include "hls_segmenter.h"
+#include "stream_types.h"
 #include "config.h"
 
 #define IMPL(x) ((WebServerImpl *) (x))
@@ -45,6 +47,7 @@ private:
     static int serve_request(struct mg_connection *conn);
     static int serve_auth(struct mg_connection *conn);
     static bool is_index(const char *uri);
+    static int serve_stream(TagType type, const string &uri, struct mg_connection *conn);
 
 private:
     DISALLOW_COPY_AND_ASSIGN(WebServerImpl);
@@ -128,8 +131,8 @@ int WebServerImpl::start(int listen_port, int server_threads)
 
     FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
         (*it)->thread_id = mg_start_thread(serve, *it);
-        LOGD("Server#%d (thread:%p) started",
-             distance(it, m_serve_param.end()), (*it)->thread_id);
+        //LOGD("Server#%d (thread:%p) started",
+        //     distance(it, m_serve_param.end()), (*it)->thread_id);
     }
 
     return 0;
@@ -144,6 +147,8 @@ int WebServerImpl::stop()
     if (!m_quit) {
         m_quit = true;
 
+        AutoLock _l(m_mutex);
+
         FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
             mg_wakeup_server((*it)->server);
         }
@@ -152,8 +157,8 @@ int WebServerImpl::stop()
 
         FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
             mg_destroy_server(&(*it)->server);
-            LOGD("Server#%d (thread:%p) ended",
-                 distance(it, m_serve_param.end()), (*it)->thread_id);
+            //LOGD("Server#%d (thread:%p) ended",
+            //     distance(it, m_serve_param.end()), (*it)->thread_id);
             SAFE_DELETE((*it));
         }
     }
@@ -224,6 +229,70 @@ int WebServerImpl::serve_request(struct mg_connection *conn)
         return MG_TRUE;
     }
 
+    TagType st_type = ST_NETURAL;
+    if (end_with(conn->uri+1, ".m3u8")) {
+        st_type = ST_FILE_HLS;
+    } else if (end_with(conn->uri+1, ".ts")) {
+        st_type = ST_FILE_TS;
+    }
+
+    if (st_type == ST_NETURAL ||
+        TAG_KIND_OF(st_type, ST_NET)) {
+        return MG_FALSE;
+    } else {
+        return IMPL(conn->server_param)->serve_stream(st_type, conn->uri+1, conn);
+    }
+}
+
+int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_connection *conn)
+{
+    string dir(dirname_(uri));
+    if (!is_dir(dir)) {
+        return MG_FALSE;
+    }
+
+    string lock_file = sprintf_("%s%c%s",
+                                STR(dir), DIRSEP, DEFAULT_HLS_LOCK_FILE);
+    AutoFileLock _l(lock_file);
+
+    switch (type) {
+    case ST_FILE_HLS:
+        if (!is_file(uri)) {
+            LOGE("!! %s not exists, pls prepare it first",
+                 STR(uri));
+        }
+        return MG_FALSE;
+
+    case ST_FILE_TS:
+        if (!is_file(uri)) {
+            LOGD("%s not exists, generate it now ..",
+                 STR(uri));
+
+            const char *ptspath = STR(uri);
+            const char *p = strchr(ptspath, '.');
+            int ndigits = 0;
+            for (char ch = *--p; isdigit(ch); ch = *--p, ++ndigits);
+            ++p;
+
+            auto_ptr<HLSSegmenter> hls_segmenter(
+                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-ptspath, ptspath), 5));
+            string media_file("/root/Videos/omn.mp4");
+            if (hls_segmenter->set_file(media_file) < 0) {
+                LOGE("HLSSegmenter load file \"%s\" failed",
+                     STR(media_file));
+                return MG_FALSE;
+            }
+            hls_segmenter->create_segment(atoi(p));
+
+            LOGD("%s done", STR(uri));
+            return MG_FALSE;
+        }
+        LOGD("%s reused", STR(uri));
+        return MG_FALSE;
+
+    default:
+        break;
+    }
     return MG_FALSE;
 }
 

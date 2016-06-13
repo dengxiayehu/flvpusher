@@ -24,4 +24,6 @@ extern char abs_program[];
 #define DEFAULT_SERVER_THREADS      5
 #define DEFAULT_DOCUMENT_ROOT       "./html"
 
+#define DEFAULT_HLS_LOCK_FILE       "hls_lock.txt"
+
 #endif /* end of _CONFIG_H_ */

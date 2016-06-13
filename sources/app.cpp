@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <getopt.h>
 #include <xlog.h>
+#include <xuri.h>
 
 #include "app.h"
 #include "config.h"
@@ -23,6 +24,7 @@
 
 using namespace xutil;
 using namespace xconfig;
+using namespace xuri;
 
 namespace flvpusher {
 
@@ -35,7 +37,7 @@ static int on_config_change(const char *conf_name, const char *value, void *user
 App::App() :
     m_sig_hdl(Signaler::get_instance()),
     m_webserver(false),
-    m_hls_time(5), m_hls_list_size(INT32_MAX),
+    m_hls_time(5),
     m_loop(false),
     m_rtmp_hdl(NULL),
     m_pusher(NULL),
@@ -127,7 +129,6 @@ int App::parse_arg(int argc, char *argv[])
         {"dafile",          required_argument, NULL, 'a'},
         {"hls_playlist",    required_argument, NULL, 'S'},
         {"hls_time",        required_argument, NULL, 't'},
-        {"hls_list_size",   required_argument, NULL, 'z'},
         {"hls_client",      required_argument, NULL, 'c'},
         {"loop",            no_argument,       NULL, 'T'},
         {"tspath",          required_argument, NULL, 's'},
@@ -139,7 +140,7 @@ int App::parse_arg(int argc, char *argv[])
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:z:c:Nf:wW;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:c:Nf:wW;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -167,10 +168,6 @@ int App::parse_arg(int argc, char *argv[])
 
         case 't':
             m_hls_time = atoi(optarg);
-            break;
-
-        case 'z':
-            m_hls_list_size = atoi(optarg);
             break;
 
         case 'T':
@@ -250,9 +247,8 @@ int App::check_arg() const
         }
 
         if (!m_hls_playlist.empty()) {
-            if (m_hls_time < 0 || m_hls_list_size < 0) {
-                LOGE("Invalid value of hls_time(%d) or hls_list_size(%d)",
-                        m_hls_time, m_hls_list_size);
+            if (m_hls_time < 0) {
+                LOGE("Invalid value of hls_time(%d)", m_hls_time);
                 return -1;
             }
         }
@@ -333,8 +329,7 @@ int App::main(int argc, char *argv[])
 
         m_hls = new HLSSegmenter(
                 m_hls_playlist, // Path of *.m3u8
-                m_hls_time,     // Desired ts-segment's duration
-                m_hls_list_size // Max# of ts-segments
+                m_hls_time      // Desired ts-segment's duration
                 );
         ret = m_hls->set_file(input[0], m_loop);
         if (ret < 0)
@@ -360,9 +355,15 @@ int App::main(int argc, char *argv[])
 #endif
             } else if (end_with(*it, ".ts")) {
                 m_pusher = new TSPusher(*it, m_rtmp_hdl);
-            } else if (end_with(*it, ".m3u8")) {
-                m_pusher = new HLSPusher(*it, m_rtmp_hdl, m_conf);
-            } else {
+            } else if (start_with(*it, "http://")) {
+                std::auto_ptr<Uri> uri_parser(new Uri);
+                uri_parser->parse(STR(*it));
+                if (end_with(uri_parser->path, ".m3u8")) {
+                    m_pusher = new HLSPusher(*it, m_rtmp_hdl, m_conf);
+                }
+            }
+
+            if (!m_pusher) {
                 LOGE("Media file \"%s\" not supported (ignored)",
                      STR(*it));
                 continue;

@@ -1,6 +1,7 @@
 #include "hls_segmenter.h"
 
 #include <math.h>
+#include <memory>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -33,10 +34,9 @@ HLSSegmenter::HLSInfo::HLSInfo()
 /////////////////////////////////////////////////////////////
 
 HLSSegmenter::HLSSegmenter(const string &hls_playlist,
-                           const int hls_time, const int hls_list_size) :
+                           const int hls_time) :
     m_hls_playlist(hls_playlist),
     m_hls_time(hls_time),
-    m_hls_list_size(hls_list_size),
     m_mf(UNSUPPORTED),
     m_quit(false)
 {
@@ -87,13 +87,15 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     
     if (!is_valid_vod_m3u8(m_hls_playlist)) {
         if (!loop) {
-            if (create_m3u8() < 0) {
-                LOGE("Create m3u8 file \"%s\" failed", STR(m_hls_playlist));
+            if (create_m3u8(true) < 0) {
+                LOGE("Create m3u8 file \"%s\" failed",
+                     STR(m_hls_playlist));
                 ret = -1;
                 goto out;
             }
         } else {
-            LOGE("No valid vod m3u8 file \"%s\" exists before loop", STR(m_hls_playlist));
+            LOGE("No valid vod m3u8 file \"%s\" exists before loop",
+                 STR(m_hls_playlist));
             ret = -1;
             goto out;
         }
@@ -115,10 +117,12 @@ void HLSSegmenter::ask2quit()
 
 int HLSSegmenter::create_m3u8(bool create_ts)
 {
-    if (!m_pl_file.open(STR(m_hls_playlist), "w"))
+    auto_ptr<File> pl_file(new File);
+    if (!pl_file->open(STR(m_hls_playlist), "w"))
         return -1;
 
-    if (!m_seek_file.open(get_seek_filename(), "wb"))
+    auto_ptr<File> seek_file(new File);
+    if (!seek_file->open(get_seek_filename(), "wb"))
         return -1;
 
     if (m_mf == MP4) {
@@ -134,9 +138,9 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                               u.mp4_parser->get_vtime_base());
         }
         memcpy(rs, u.mp4_parser->m_status, sizeof(rs));
-        if (!m_seek_file.write_buffer((uint8_t *) rs, sizeof(rs))) {
+        if (!seek_file->write_buffer((uint8_t *) rs, sizeof(rs))) {
             LOGE("Write seek file \"%s\" failed",
-                 m_seek_file.get_path());
+                 seek_file->get_path());
             return -1;
         }
         while (!m_quit &&
@@ -158,9 +162,9 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                 if (create_ts)
                     SAFE_DELETE(tsmuxer);
                 info->segments.push_back((HLSSegment) {filename, info->duration});
-                if (!m_seek_file.write_buffer((uint8_t *) rs, sizeof(rs))) {
+                if (!seek_file->write_buffer((uint8_t *) rs, sizeof(rs))) {
                     LOGE("Write seek file \"%s\" failed",
-                         m_seek_file.get_path());
+                         seek_file->get_path());
                     return -1;
                 }
 
@@ -198,22 +202,20 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                      "#EXT-X-TARGETDURATION:%d\n"
                      "#EXT-X-MEDIA-SEQUENCE:0\n",
                      target_duration);
-        m_pl_file.write_buffer((uint8_t *) buf, n);
+        pl_file->write_buffer((uint8_t *) buf, n);
         FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
             n = snprintf(buf, sizeof(buf)-1,
                          "#EXTINF:%f,\n"
                          "%s\n",
                          it->duration,
                          STR(basename_(it->filename)));
-            m_pl_file.write_buffer((uint8_t *) buf, n);
+            pl_file->write_buffer((uint8_t *) buf, n);
         }
         n = snprintf(buf, sizeof(buf)-1, "#EXT-X-ENDLIST");
-        m_pl_file.write_buffer((uint8_t *) buf, n);
+        pl_file->write_buffer((uint8_t *) buf, n);
 
     }
 
-    m_seek_file.close();
-    m_pl_file.close();
     return 0;
 }
 
@@ -221,11 +223,15 @@ int HLSSegmenter::create_segment(uint32_t idx)
 {
     MP4Parser::ReadStatus rs[MP4Parser::NB_TRACK];
 
-    if (!m_seek_file.seek_to(idx * sizeof(rs))) {
+    auto_ptr<File> seek_file(new File);
+    if (!seek_file->open(get_seek_filename(), "rb+"))
+        return -1;
+
+    if (!seek_file->seek_to(idx * sizeof(rs))) {
         LOGE("idx %d out of range", idx);
         return -1;
     }
-    if (!m_seek_file.read_buffer((uint8_t *) rs, sizeof(rs)))
+    if (!seek_file->read_buffer((uint8_t *) rs, sizeof(rs)))
         return -1;
     memcpy(u.mp4_parser->m_status, rs, sizeof(rs));
 
