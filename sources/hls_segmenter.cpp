@@ -213,7 +213,6 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         }
         n = snprintf(buf, sizeof(buf)-1, "#EXT-X-ENDLIST");
         pl_file->write_buffer((uint8_t *) buf, n);
-
     }
 
     return 0;
@@ -224,7 +223,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
     MP4Parser::ReadStatus rs[MP4Parser::NB_TRACK];
 
     auto_ptr<File> seek_file(new File);
-    if (!seek_file->open(get_seek_filename(), "rb+"))
+    if (!seek_file->open(get_seek_filename(), "rb"))
         return -1;
 
     if (!seek_file->seek_to(idx * sizeof(rs))) {
@@ -238,13 +237,9 @@ int HLSSegmenter::create_segment(uint32_t idx)
     HLSInfo *info = &m_info;
     Packet pkt1, *pkt = &pkt1;
     AVRational tb = (AVRational) {1, 1000};
-    string filename(sprintf_(STR(info->basenm), idx));
-    if (is_file(filename)) {
-        //LOGD("ts file \"%s\" already exists", STR(filename));
-        return 0;
-    }
     TSMuxer *tsmuxer = new TSMuxer;
-    tsmuxer->set_file(filename, u.mp4_parser->get_vtime_base());
+    tsmuxer->set_file(sprintf_(STR(info->basenm), idx),
+                      u.mp4_parser->get_vtime_base());
     while (!m_quit &&
            !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
         if (info->start_pts == -1) {
