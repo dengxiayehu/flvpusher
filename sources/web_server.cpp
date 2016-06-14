@@ -3,6 +3,7 @@
 #include <mongoose.h>
 #include <xlog.h>
 #include <xcurl.h>
+#include <xfile.h>
 
 #include "web_server.h"
 #include "hls_segmenter.h"
@@ -14,6 +15,7 @@
 using namespace xutil;
 using namespace xconfig;
 using namespace xcurl;
+using namespace xfile;
 using namespace std;
 
 namespace flvpusher {
@@ -251,10 +253,6 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
         return MG_FALSE;
     }
 
-    string lock_file = sprintf_("%s%c%s",
-                                STR(dir), DIRSEP, DEFAULT_HLS_LOCK_FILE);
-    AutoFileLock _l(lock_file);
-
     switch (type) {
     case ST_FILE_HLS:
         if (!is_file(uri)) {
@@ -274,9 +272,17 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
             for (char ch = *--p; isdigit(ch); ch = *--p, ++ndigits);
             ++p;
 
+            auto_ptr<File> lock_file(new File);
+            if (!lock_file->open(sprintf_("%s%c%s", STR(dir),
+                                          DIRSEP, DEFAULT_HLS_LOCK_FILE), "r"))
+                return -1;
+
+            char media_file[PATH_MAX], hls_time[10];
+            lock_file->read_line(media_file, sizeof(media_file));
+            media_file[strlen(media_file) - 1] = '\0';
+            lock_file->read_line(hls_time, sizeof(hls_time));
             auto_ptr<HLSSegmenter> hls_segmenter(
-                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-ptspath, ptspath), 5));
-            string media_file("/root/Videos/omn.mp4");
+                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-ptspath, ptspath), atoi(hls_time)));
             if (hls_segmenter->set_file(media_file) < 0) {
                 LOGE("HLSSegmenter load file \"%s\" failed",
                      STR(media_file));

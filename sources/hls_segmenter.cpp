@@ -27,8 +27,8 @@ HLSSegmenter::HLSInfo::HLSInfo()
 {
     number = 1;
     sequence = 0;
-    start_pts = -1;
-    end_pts = -1;
+    start_pts = 0;
+    end_pts = 0;
 }
 
 /////////////////////////////////////////////////////////////
@@ -87,7 +87,17 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     
     if (!is_valid_vod_m3u8(m_hls_playlist)) {
         if (!loop) {
-            if (create_m3u8(true) < 0) {
+            auto_ptr<File> lock_file(new File);
+            if (!lock_file->open(sprintf_("%s%c%s", STR(dirname_(m_hls_playlist)),
+                                          DIRSEP, DEFAULT_HLS_LOCK_FILE), "w"))
+                return -1;
+
+            char abs_filename[PATH_MAX];
+            ABS_PATH(STR(filename), abs_filename, sizeof(abs_filename));
+            lock_file->write_string(abs_filename);
+            lock_file->write_string(STR(sprintf_("\n%d\n", m_hls_time)));
+
+            if (create_m3u8() < 0) {
                 LOGE("Create m3u8 file \"%s\" failed",
                      STR(m_hls_playlist));
                 ret = -1;
@@ -145,10 +155,6 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         }
         while (!m_quit &&
                !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
-            if (info->start_pts == -1) {
-                info->start_pts = pkt->pts;
-                info->end_pts = pkt->pts;
-            }
             bool is_video = !check_h264_startcode(pkt);
             bool is_key = !is_video ||
                           ((pkt->data[4]&0x1f) == 5 ||
@@ -242,10 +248,6 @@ int HLSSegmenter::create_segment(uint32_t idx)
                       u.mp4_parser->get_vtime_base());
     while (!m_quit &&
            !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
-        if (info->start_pts == -1) {
-            info->start_pts = pkt->pts;
-            info->end_pts = pkt->pts;
-        }
         bool is_video = !check_h264_startcode(pkt);
         bool is_key = !is_video ||
                       ((pkt->data[4]&0x1f) == 5 ||
