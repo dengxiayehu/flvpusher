@@ -51,6 +51,7 @@ private:
     static int serve_auth(struct mg_connection *conn);
     static bool is_index(const char *uri);
     static int serve_stream(TagType type, const string &uri, struct mg_connection *conn);
+    static int recycle(const char *root);
 
 private:
     DISALLOW_COPY_AND_ASSIGN(WebServerImpl);
@@ -60,10 +61,12 @@ private:
     volatile bool m_quit;
     DECL_THREAD_ROUTINE(WebServerImpl, heartbeat_routine);
     Thread *m_heartbeat_thrd;
+    DECL_THREAD_ROUTINE(WebServerImpl, recycle_routine);
+    Thread *m_recycle_thrd;
 };
 
 WebServerImpl::WebServerImpl(Config *conf) :
-    m_conf(conf), m_quit(false), m_heartbeat_thrd(NULL)
+    m_conf(conf), m_quit(false), m_heartbeat_thrd(NULL), m_recycle_thrd(NULL)
 {
     memset(options, 0, sizeof(options));
 }
@@ -144,6 +147,9 @@ int WebServerImpl::start(int listen_port, int server_threads)
     m_heartbeat_thrd =
         CREATE_THREAD_ROUTINE(heartbeat_routine, NULL, false);
 
+    m_recycle_thrd =
+        CREATE_THREAD_ROUTINE(recycle_routine, NULL, false);
+
     return 0;
 }
 
@@ -156,7 +162,11 @@ int WebServerImpl::stop()
     if (!m_quit) {
         m_quit = true;
 
+        pthread_kill(m_heartbeat_thrd->get_tid(), SIGALRM);
+        pthread_kill(m_recycle_thrd->get_tid(), SIGALRM);
+
         JOIN_DELETE_THREAD(m_heartbeat_thrd);
+        JOIN_DELETE_THREAD(m_recycle_thrd);
 
         AutoLock _l(m_mutex);
 
@@ -259,11 +269,20 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
         return MG_FALSE;
     }
 
+    auto_ptr<File> info_file(new File);
+    if (!info_file->open(sprintf_("%s%c%s", STR(dir),
+                    DIRSEP, DEFAULT_HLS_INFO_FILE), "rb+"))
+        return -1;
+
     switch (type) {
     case ST_FILE_HLS:
         if (!is_file(uri)) {
             LOGE("!! %s not exists, pls prepare it first",
                  STR(uri));
+        } else {
+            info_file->seek_to(1024 /* filename */ + 1 /* hls_time */);
+            info_file->writeui64(get_time_now());
+            info_file->flush();
         }
         return MG_FALSE;
 
@@ -282,17 +301,13 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
             for (char ch = *--p; isdigit(ch); ch = *--p, ++ndigits);
             ++p;
 
-            auto_ptr<File> info_file(new File);
-            if (!info_file->open(sprintf_("%s%c%s", STR(dir),
-                                          DIRSEP, DEFAULT_HLS_INFO_FILE), "r"))
-                return -1;
-
-            char media_file[PATH_MAX], hls_time[10];
-            info_file->read_line(media_file, sizeof(media_file));
-            media_file[strlen(media_file) - 1] = '\0';
-            info_file->read_line(hls_time, sizeof(hls_time));
+            char media_file[1024];
+            uint8_t hls_time;
+            info_file->seek_begin();
+            info_file->read_buffer((uint8_t *) media_file, sizeof(media_file));
+            info_file->readui8(&hls_time);
             auto_ptr<HLSSegmenter> hls_segmenter(
-                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-ptspath, ptspath), atoi(hls_time)));
+                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-ptspath, ptspath), hls_time));
             if (hls_segmenter->set_file(media_file) < 0) {
                 LOGE("HLSSegmenter load file \"%s\" failed",
                      STR(media_file));
@@ -373,7 +388,7 @@ void *WebServerImpl::heartbeat_routine(void *arg)
         Curl::request *req =
             Curl::request::build(Curl::OPTIONS,
                                  STR(sprintf_("http://127.0.0.1:%s", get_option(options, "listening_port"))),
-                                 NULL, NULL, 3);
+                                 NULL, NULL, 3, NULL, false);
         if (!req) {
             LOGE("Build OPTIONS as heartbeat request failed");
             heartbeat_failed = true;
@@ -394,8 +409,7 @@ void *WebServerImpl::heartbeat_routine(void *arg)
                 GET_CONFIG_INT(m_conf, curl_heartbeat_interval);
             }
 
-            short_snap(curl_heartbeat_interval*1000,
-                       &m_quit);
+            sleep_(curl_heartbeat_interval*1000);
         }
     }
 
@@ -412,6 +426,28 @@ void *WebServerImpl::heartbeat_routine(void *arg)
     }
 
     return (void *) NULL;
+}
+
+void *WebServerImpl::recycle_routine(void *arg)
+{
+    while (!m_quit) {
+        int hls_scan_interval = DEFAULT_HLS_SCAN_INTERVAL;
+        if (m_conf) {
+            GET_CONFIG_INT(m_conf, hls_scan_interval);
+        }
+        sleep_(hls_scan_interval*1000);
+
+        if (m_quit)
+            break;
+
+        recycle(get_option(options, "document_root"));
+    }
+    return (void *) NULL;
+}
+
+int WebServerImpl::recycle(const char *root)
+{
+    return 0;
 }
 
 /////////////////////////////////////////////////////////////

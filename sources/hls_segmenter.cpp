@@ -89,13 +89,14 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
         if (!loop) {
             auto_ptr<File> info_file(new File);
             if (!info_file->open(sprintf_("%s%c%s", STR(dirname_(m_hls_playlist)),
-                                          DIRSEP, DEFAULT_HLS_INFO_FILE), "w"))
+                                          DIRSEP, DEFAULT_HLS_INFO_FILE), "wb"))
                 return -1;
 
-            char abs_filename[PATH_MAX];
+            char abs_filename[1024] = { 0 };
             ABS_PATH(STR(filename), abs_filename, sizeof(abs_filename));
-            info_file->write_string(abs_filename);
-            info_file->write_string(STR(sprintf_("\n%d\n", m_hls_time)));
+            info_file->write_buffer((const uint8_t *) abs_filename, sizeof(abs_filename));
+            info_file->writeui8(m_hls_time);
+            info_file->writeui64(get_time_now());
 
             if (create_m3u8() < 0) {
                 LOGE("Create m3u8 file \"%s\" failed",

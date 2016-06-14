@@ -61,7 +61,7 @@ App::~App()
 int App::init()
 {
     if (m_sig_hdl->install(sighandler,
-                           SIGINT, Signaler::SIGLIST_END) != SUCCESS) {
+                           SIGINT, SIGALRM, Signaler::SIGLIST_END) != SUCCESS) {
         LOGE("Install SIGINT's handler failed");
         return -1;
     }
@@ -392,7 +392,9 @@ int App::main(int argc, char *argv[])
 
 static void sighandler(int signo)
 {
-    App::get_instance()->ask2quit();
+    if (signo == SIGINT) {
+        App::get_instance()->ask2quit();
+    }
 }
 
 static int on_config_change(const char *conf_name, const char *value, void *user)

@@ -14,11 +14,11 @@ extern char abs_program[];
 #define RTMP_DEF_BUFTIME        (10*60*60*1000) // 10 hours default
 #define RTMP_MAX_PLAY_BUFSIZE   (10*1024*1024)  // 10M
 
-#define NEW_STREAM_TIMESTAMP_THESHO 300
+#define NEW_STREAM_TIMESTAMP_THESHO     300
 
-#define DEFAULT_CFG_FILE            "./flvpusher_cfg.txt"
+#define DEFAULT_CFG_FILE                "./flvpusher_cfg.txt"
 
-#define DEFAULT_CURL_HLS_TIMEOUT    20
+#define DEFAULT_CURL_HLS_TIMEOUT        20
 #define DEFAULT_CURL_HEARTBEAT_INTERVAL 60
 
 #define DEFAULT_LISTEN_PORT         9877
@@ -28,5 +28,8 @@ extern char abs_program[];
 #define DEFAULT_HLS_INFO_FILE       "hls_info.txt"
 
 #define DEFAULT_WAIT_SEGMENT_DONE   20
+
+#define DEFAULT_HLS_EXPIRE_TIME     10
+#define DEFAULT_HLS_SCAN_INTERVAL   5
 
 #endif /* end of _CONFIG_H_ */

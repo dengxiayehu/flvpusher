@@ -960,4 +960,71 @@ AutoFileLock::~AutoFileLock()
     }
 }
 
+/////////////////////////////////////////////////////////////
+
+int tm_to_time(const struct tm *tm, Time *t)
+{
+    if (!tm || !t)
+        return -1;
+
+    t->year = tm->tm_year + 1900;
+    t->mon = tm->tm_mon + 1;
+    t->day = tm->tm_mday;
+    t->hour = tm->tm_hour;
+    t->min = tm->tm_min;
+    t->sec = tm->tm_sec;
+    return 0;
+}
+
+int time_to_tm(const Time *t, struct tm *tm)
+{
+    if (!t || !tm)
+        return -1;
+
+    tm->tm_year = t->year - 1900;
+    tm->tm_mon = t->mon - 1;
+    tm->tm_mday = t->day;
+    tm->tm_hour = t->hour;
+    tm->tm_min = t->min;
+    tm->tm_sec = t->sec;
+    tm->tm_isdst = 0;
+    return 0;
+}
+
+int time_get(Time *t)
+{
+    time_t now;
+    struct tm *tm, tmpbuf;
+
+    time(&now);
+    tm = localtime_r(&now, &tmpbuf);
+    if (!tm)
+        return -1;
+    return tm_to_time(tm, t);
+}
+
+long time_gap(const Time *t1, const Time *t2)
+{
+    assert(t1 && t2);
+    return time_mktime(t1) - time_mktime(t2);
+}
+
+time_t time_mktime(const Time *t)
+{
+    struct tm tmpbuf;
+
+    if (time_to_tm(t, &tmpbuf) < 0)
+        return 0;
+    return mktime(&tmpbuf);
+}
+
+int time_copy(Time *dst, const Time *src)
+{
+    if (!dst || !src)
+        return -1;
+
+    memcpy(dst, src, sizeof(*dst));
+    return 0;
+}
+
 }

@@ -6,3 +6,5 @@ curl_heartbeat_interval: 60 # <INTEGER> [60]
 listen_port: 9877           # <INTEGER> [9877] {1024~65535}
 server_threads: 5           # <INTEGER> [5] {1~24}
 document_root: ./html       # <STRING> [./html]
+hls_expire_time: 259200     # <INTEGER> [259200]
+hls_scan_interval: 43200    # <INTEGER> [43200]

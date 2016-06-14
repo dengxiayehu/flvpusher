@@ -265,6 +265,7 @@ public:
     status_t join();
     bool is_detach() const { return m_detach; }
     bool is_alive() const;
+    pthread_t get_tid() const { return m_tid; }
 
     virtual void run() = 0;
 
@@ -351,6 +352,24 @@ private:
     int  m_fd;
     std::string m_flock_path;
 };
+
+/////////////////////////////////////////////////////////////
+
+typedef struct Time {
+    int year;
+    int mon;
+    int day;
+    int hour;
+    int min;
+    int sec;
+} Time;
+
+int time_get(Time *t);
+long time_gap(const Time *t1, const Time *t2);
+time_t time_mktime(const Time *t);
+int time_copy(Time *dst, const Time *src);
+int tm_to_time(const struct tm *tm, Time *t);
+int time_to_tm(const Time *t, struct tm *tm);
 
 }
 
