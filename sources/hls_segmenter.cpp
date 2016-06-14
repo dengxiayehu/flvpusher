@@ -87,15 +87,15 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     
     if (!is_valid_vod_m3u8(m_hls_playlist)) {
         if (!loop) {
-            auto_ptr<File> lock_file(new File);
-            if (!lock_file->open(sprintf_("%s%c%s", STR(dirname_(m_hls_playlist)),
-                                          DIRSEP, DEFAULT_HLS_LOCK_FILE), "w"))
+            auto_ptr<File> info_file(new File);
+            if (!info_file->open(sprintf_("%s%c%s", STR(dirname_(m_hls_playlist)),
+                                          DIRSEP, DEFAULT_HLS_INFO_FILE), "w"))
                 return -1;
 
             char abs_filename[PATH_MAX];
             ABS_PATH(STR(filename), abs_filename, sizeof(abs_filename));
-            lock_file->write_string(abs_filename);
-            lock_file->write_string(STR(sprintf_("\n%d\n", m_hls_time)));
+            info_file->write_string(abs_filename);
+            info_file->write_string(STR(sprintf_("\n%d\n", m_hls_time)));
 
             if (create_m3u8() < 0) {
                 LOGE("Create m3u8 file \"%s\" failed",
