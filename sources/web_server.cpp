@@ -261,8 +261,12 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
         }
         return MG_FALSE;
 
-    case ST_FILE_TS:
+    case ST_FILE_TS: {
+        string segment_lock_file(sprintf_("%s.lock", STR(uri)));
+
         if (!is_file(uri)) {
+            system_(STR(sprintf_("touch %s", STR(segment_lock_file))));
+
             LOGD("%s not exists, generate it now ..",
                  STR(uri));
 
@@ -291,10 +295,17 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
             hls_segmenter->create_segment(atoi(p));
 
             LOGD("%s done", STR(uri));
+
+            rm_(segment_lock_file);
             return MG_FALSE;
+        } else {
+            while (is_file(segment_lock_file)) {
+                LOGD("%s generating, wait");
+                sleep_(3);
+            }
         }
         LOGD("%s reused", STR(uri));
-        return MG_FALSE;
+        } return MG_FALSE;
 
     default:
         break;

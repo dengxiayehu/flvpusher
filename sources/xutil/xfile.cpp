@@ -390,7 +390,7 @@ int File::flush_content(const std::string &path, const uint8_t *buf, int buf_siz
         LOGE("Open file(\"%s\") failed", STR(path));
         return -1;
     }
-    if (!file.write_buffer(buf, buf_size)) {
+    if (buf && buf_size && !file.write_buffer(buf, buf_size)) {
         LOGE("Write content to file(\"%s\") failed", STR(path));
         return -1;
     }
