@@ -19,11 +19,14 @@ extern char abs_program[];
 #define DEFAULT_CFG_FILE            "./flvpusher_cfg.txt"
 
 #define DEFAULT_CURL_HLS_TIMEOUT    20
+#define DEFAULT_CURL_HEARTBEAT_INTERVAL 60
 
 #define DEFAULT_LISTEN_PORT         9877
 #define DEFAULT_SERVER_THREADS      5
 #define DEFAULT_DOCUMENT_ROOT       "./html"
 
 #define DEFAULT_HLS_INFO_FILE       "hls_info.txt"
+
+#define DEFAULT_WAIT_SEGMENT_DONE   20
 
 #endif /* end of _CONFIG_H_ */

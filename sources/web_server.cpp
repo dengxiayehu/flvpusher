@@ -35,6 +35,7 @@ public:
 
 private:
     enum { kMaxOptions = 100 };
+    char *options[kMaxOptions];
     static void set_option(char **options, const char *name, const char *value);
     static char *get_option(char **options, const char *option_name);
     static bool verify_existence(char **options, const char *name, bool dir);
@@ -57,15 +58,21 @@ private:
     RecursiveMutex m_mutex;
     vector<ServeParam *> m_serve_param;
     volatile bool m_quit;
+    DECL_THREAD_ROUTINE(WebServerImpl, heartbeat_routine);
+    Thread *m_heartbeat_thrd;
 };
 
 WebServerImpl::WebServerImpl(Config *conf) :
-    m_conf(conf), m_quit(false)
+    m_conf(conf), m_quit(false), m_heartbeat_thrd(NULL)
 {
+    memset(options, 0, sizeof(options));
 }
 
 WebServerImpl::~WebServerImpl()
 {
+    for (int i = 0; options[i]; ++i) {
+        SAFE_FREE(options[i]);
+    }
 }
 
 int WebServerImpl::start(int listen_port, int server_threads)
@@ -99,7 +106,6 @@ int WebServerImpl::start(int listen_port, int server_threads)
         system_("mkdir -p %s", STR(document_root));
     }
 
-    char *options[kMaxOptions] = { NULL };
     set_option(options, "document_root", STR(document_root));
     set_option(options, "listening_port", STR(sprintf_("%d", listen_port)));
 
@@ -117,8 +123,6 @@ int WebServerImpl::start(int listen_port, int server_threads)
             if (!strcmp(options[i], "listening_port"))
                 break;
         }
-        SAFE_FREE(options[i]);
-        SAFE_FREE(options[i + 1]);
     }
 
     if (chdir(STR(document_root)) < 0) {
@@ -137,6 +141,9 @@ int WebServerImpl::start(int listen_port, int server_threads)
         //     distance(it, m_serve_param.end()), (*it)->thread_id);
     }
 
+    m_heartbeat_thrd =
+        CREATE_THREAD_ROUTINE(heartbeat_routine, NULL, false);
+
     return 0;
 }
 
@@ -149,13 +156,11 @@ int WebServerImpl::stop()
     if (!m_quit) {
         m_quit = true;
 
+        JOIN_DELETE_THREAD(m_heartbeat_thrd);
+
         AutoLock _l(m_mutex);
 
-        FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
-            mg_wakeup_server((*it)->server);
-        }
-
-        sleep_(200);
+        sleep_(1000);
 
         FOR_VECTOR_ITERATOR(ServeParam *, m_serve_param, it) {
             mg_destroy_server(&(*it)->server);
@@ -226,7 +231,8 @@ int WebServerImpl::serve_request(struct mg_connection *conn)
     if (IMPL(conn->server_param)->m_quit)
         return MG_FALSE;
 
-    if (!strcmp(conn->uri, "/") || is_index(conn->uri+1)) {
+    if (!strcmp(conn->request_method, "GET") &&
+        (!strcmp(conn->uri, "/") || is_index(conn->uri+1))) {
         mg_send_data(conn, html_index, strlen(html_index));
         return MG_TRUE;
     }
@@ -301,7 +307,7 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
         } else {
             while (is_file(segment_lock_file)) {
                 LOGD("%s generating, wait");
-                sleep_(3);
+                sleep_(DEFAULT_WAIT_SEGMENT_DONE);
             }
         }
         LOGD("%s reused", STR(uri));
@@ -356,6 +362,56 @@ int WebServerImpl::send_response(struct mg_connection *conn,
         return -1;
     }
     return 0;
+}
+
+void *WebServerImpl::heartbeat_routine(void *arg)
+{
+    bool heartbeat_failed = false;
+    auto_ptr<Curl> curl(new Curl);
+
+    while (!m_quit && !heartbeat_failed) {
+        Curl::request *req =
+            Curl::request::build(Curl::OPTIONS,
+                                 STR(sprintf_("http://127.0.0.1:%s", get_option(options, "listening_port"))),
+                                 NULL, NULL, 3);
+        if (!req) {
+            LOGE("Build OPTIONS as heartbeat request failed");
+            heartbeat_failed = true;
+            break;
+        }
+        if (curl->perform(req, NULL) < 0 ||
+            req->response_code != 200) {
+            LOGE("curl heartbeat failed (response_code=%d)",
+                 req->response_code);
+            heartbeat_failed = true;
+        }
+        Curl::request::recycle(&req);
+
+        if (!heartbeat_failed) {
+            int curl_heartbeat_interval =
+                DEFAULT_CURL_HEARTBEAT_INTERVAL;
+            if (m_conf) {
+                GET_CONFIG_INT(m_conf, curl_heartbeat_interval);
+            }
+
+            short_snap(curl_heartbeat_interval*1000,
+                       &m_quit);
+        }
+    }
+
+    if (!m_quit && heartbeat_failed) {
+        LOGE("heartbeat routine failed");
+
+        if (raise(SIGINT) < 0) {
+            LOGE("raise SIGINT to stop self failed: %s",
+                 ERRNOMSG);
+            m_quit = true;
+            sleep_(1000);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return (void *) NULL;
 }
 
 /////////////////////////////////////////////////////////////
