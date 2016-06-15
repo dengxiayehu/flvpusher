@@ -11,6 +11,7 @@ namespace flvpusher {
 
 FLVParser::FLVParser()
 {
+    memset(&m_status, 0, sizeof(m_status));
 }
 
 FLVParser::~FLVParser()
@@ -38,7 +39,7 @@ bool FLVParser::eof() const
 }
 
 int FLVParser::read_header(FLVHeader &hdr,
-                           uint8_t *buf, uint32_t buf_size) const
+                           uint8_t *buf, uint32_t buf_size)
 {
     if (!buf) {
         if (!m_file.read_buffer(reinterpret_cast<uint8_t *>(&hdr),
@@ -98,6 +99,9 @@ int FLVParser::read_header(FLVHeader &hdr,
     LOGD("Header length: %d", hdr.dataoffset);
     LOGD("Previous Tag Size: %u", prev_tag_size);
 #endif
+
+    m_status.file_offset = m_file.cursor();
+
     return hdr.dataoffset + sizeof(uint32_t);
 }
 
@@ -187,6 +191,8 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
              VALUI24(tag->hdr.datasize), sizeof(FLVTagHeader));
         return -1;
     }
+
+    m_status.file_offset = m_file.cursor();
 
     return VALUI24(tag->hdr.datasize) +
         sizeof(FLVTagHeader) + sizeof(uint32_t);

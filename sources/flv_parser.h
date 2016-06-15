@@ -132,11 +132,16 @@ public:
 
 public:
     int read_header(FLVHeader &hdr,
-                    uint8_t *buf = NULL, uint32_t buf_size = 0) const;
+                    uint8_t *buf = NULL, uint32_t buf_size = 0);
     int read_tag(FLVTag *&tag,
                  uint8_t *buf = NULL, uint32_t buf_size = 0);
     FLVTag *alloc_tag() const;
     int free_tag(FLVTag *&tag) const;
+
+private:
+    struct ReadStatus {
+        off_t file_offset;
+    };
 
 private:
     static int free_video_tag_dat(FLVVideoTagData &vdat);
@@ -156,6 +161,8 @@ private:
     xfile::File m_file;
 
     xutil::MemHolder m_mem_holder;
+
+    ReadStatus m_status;
 };
 
 }
