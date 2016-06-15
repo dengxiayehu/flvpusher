@@ -127,11 +127,11 @@ int MP4Parser::init_tracks_from_box(Box *box, Track *&trak)
                 trak->video_track = true;
             }
             trak->track_ID = tkhd->track_ID;
-            trak->duration =
-                tkhd->ver == 1 ? tkhd->duration.u64 : tkhd->duration.u32;
         } else if (p->typ == MKTAG4('m', 'd', 'h', 'd')) {
             MovieHeaderBox *mdhd = (MovieHeaderBox *) p;
             trak->timescale = mdhd->timescale;
+            trak->duration =
+                mdhd->ver == 1 ? mdhd->duration.u64 : mdhd->duration.u32;
         } else if (p->typ == MKTAG4('a', 'v', 'c', '1')) {
             trak->avc1 = (VisualSampleEntry *) p;
         } else if (p->typ == MKTAG4('a', 'v', 'c', 'C')) {

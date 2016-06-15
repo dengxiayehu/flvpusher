@@ -9,6 +9,7 @@
 #include <xnet.h>
 
 #include "flv_parser.h"
+#include "tag_streamer.h"
 #include "mp4_parser.h"
 #include "ts_muxer.h"
 #include "hls_common.h"
@@ -45,10 +46,11 @@ HLSSegmenter::HLSSegmenter(const string &hls_playlist,
 
 HLSSegmenter::~HLSSegmenter()
 {
-    if (m_mf == FLV)
-        SAFE_DELETE(u.flv_parser);
-    else if (m_mf == MP4)
-        SAFE_DELETE(u.mp4_parser);
+    if (m_mf == FLV) {
+        SAFE_DELETE(u.flv.parser);
+    } else if (m_mf == MP4) {
+        SAFE_DELETE(u.mp4.parser);
+    }
 }
 
 int HLSSegmenter::set_file(const string &filename, bool loop)
@@ -60,13 +62,21 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     int ret = 0;
     if (end_with(filename, ".mp4")) {
         m_mf = MP4;
-        u.mp4_parser = new MP4Parser;
-        if (u.mp4_parser->set_file(filename) < 0) {
+        u.mp4.parser = new MP4Parser;
+        if (u.mp4.parser->set_file(filename) < 0) {
             LOGE("Load mp4 file \"%s\" failed", STR(filename));
             ret = -1;
             goto out;
         }
-        u.mp4_parser->init_ffmpeg_context();
+        u.mp4.parser->init_ffmpeg_context();
+    } else if (end_with(filename, ".flv")) {
+        m_mf = FLV;
+        u.flv.parser = new FLVParser;
+        if (u.flv.parser->set_file(filename) < 0) {
+            LOGE("Load flv file \"%s\" failed", STR(filename));
+            ret = -1;
+            goto out;
+        }
     } else {
         LOGE("Not support file:\"%s\" for hls-segmenter",
              STR(filename));
@@ -136,26 +146,26 @@ int HLSSegmenter::create_m3u8(bool create_ts)
     if (!seek_file->open(get_seek_filename(), "wb"))
         return -1;
 
+    HLSInfo *info = &m_info;
+    AVRational tb = (AVRational) {1, 1000};
+    string filename(sprintf_(STR(info->basenm), info->sequence));
+    TSMuxer *tsmuxer = NULL;
     if (m_mf == MP4) {
-        HLSInfo *info = &m_info;
         Packet pkt1, *pkt = &pkt1;
-        AVRational tb = (AVRational) {1, 1000};
-        string filename(sprintf_(STR(info->basenm), info->sequence));
         MP4Parser::ReadStatus rs[MP4Parser::NB_TRACK];
-        TSMuxer *tsmuxer = NULL;
         if (create_ts) {
             tsmuxer = new TSMuxer;
             tsmuxer->set_file(filename,
-                              u.mp4_parser->get_vtime_base());
+                              u.mp4.parser->get_vtime_base());
         }
-        memcpy(rs, u.mp4_parser->m_status, sizeof(rs));
+        memcpy(rs, u.mp4.parser->m_status, sizeof(rs));
         if (!seek_file->write_buffer((uint8_t *) rs, sizeof(rs))) {
             LOGE("Write seek file \"%s\" failed",
                  seek_file->get_path());
             return -1;
         }
         while (!m_quit &&
-               !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
+               !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
             bool is_video = !check_h264_startcode(pkt);
             bool is_key = !is_video ||
                           ((pkt->data[4]&0x1f) == 5 ||
@@ -183,45 +193,51 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                 filename = sprintf_(STR(info->basenm), info->sequence);
                 if (create_ts) {
                     tsmuxer = new TSMuxer;
-                    tsmuxer->set_file(filename, u.mp4_parser->get_vtime_base());
+                    tsmuxer->set_file(filename, u.mp4.parser->get_vtime_base());
                 }
             }
             if (create_ts)
                 tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, is_video);
-            memcpy(rs, u.mp4_parser->m_status, sizeof(rs));
+            memcpy(rs, u.mp4.parser->m_status, sizeof(rs));
             SAFE_FREE(pkt->data);
         }
         if (create_ts)
             SAFE_DELETE(tsmuxer);
         info->segments.push_back((HLSSegment) {filename, info->duration});
-
-        int target_duration = 0;
-        FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
-            if (target_duration < it->duration)
-                target_duration = ceil(it->duration);
+    } else if (m_mf == FLV) {
+        if (create_ts) {
+            tsmuxer = new TSMuxer;
+            tsmuxer->set_file(filename, (AVRational) {1001, 30000});
         }
-        char buf[2048];
-        int n;
-        n = snprintf(buf, sizeof(buf)-1,
-                     "#EXTM3U\n"
-                     "#EXT-X-VERSION:3\n"
-                     "#EXT-X-ALLOW-CACHE:NO\n"
-                     "#EXT-X-TARGETDURATION:%d\n"
-                     "#EXT-X-MEDIA-SEQUENCE:0\n",
-                     target_duration);
-        pl_file->write_buffer((uint8_t *) buf, n);
-        FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
-            n = snprintf(buf, sizeof(buf)-1,
-                         "#EXTINF:%f,\n"
-                         "%s\n",
-                         it->duration,
-                         STR(basename_(it->filename)));
-            pl_file->write_buffer((uint8_t *) buf, n);
-        }
-        n = snprintf(buf, sizeof(buf)-1, "#EXT-X-ENDLIST");
-        pl_file->write_buffer((uint8_t *) buf, n);
+        if (create_ts)
+            SAFE_DELETE(tsmuxer);
     }
 
+    int target_duration = 0;
+    FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
+        if (target_duration < it->duration)
+            target_duration = ceil(it->duration);
+    }
+    char buf[2048];
+    int n;
+    n = snprintf(buf, sizeof(buf)-1,
+                 "#EXTM3U\n"
+                 "#EXT-X-VERSION:3\n"
+                 "#EXT-X-ALLOW-CACHE:NO\n"
+                 "#EXT-X-TARGETDURATION:%d\n"
+                 "#EXT-X-MEDIA-SEQUENCE:0\n",
+                 target_duration);
+    pl_file->write_buffer((uint8_t *) buf, n);
+    FOR_VECTOR_ITERATOR(HLSSegment, info->segments, it) {
+        n = snprintf(buf, sizeof(buf)-1,
+                     "#EXTINF:%f,\n"
+                     "%s\n",
+                     it->duration,
+                     STR(basename_(it->filename)));
+        pl_file->write_buffer((uint8_t *) buf, n);
+    }
+    n = snprintf(buf, sizeof(buf)-1, "#EXT-X-ENDLIST");
+    pl_file->write_buffer((uint8_t *) buf, n);
     return 0;
 }
 
@@ -239,16 +255,16 @@ int HLSSegmenter::create_segment(uint32_t idx)
     }
     if (!seek_file->read_buffer((uint8_t *) rs, sizeof(rs)))
         return -1;
-    memcpy(u.mp4_parser->m_status, rs, sizeof(rs));
+    memcpy(u.mp4.parser->m_status, rs, sizeof(rs));
 
     HLSInfo *info = &m_info;
     Packet pkt1, *pkt = &pkt1;
     AVRational tb = (AVRational) {1, 1000};
     TSMuxer *tsmuxer = new TSMuxer;
     tsmuxer->set_file(sprintf_(STR(info->basenm), idx),
-                      u.mp4_parser->get_vtime_base());
+                      u.mp4.parser->get_vtime_base());
     while (!m_quit &&
-           !u.mp4_parser->mp4_read_packet(u.mp4_parser->m_mp4->stream, pkt)) {
+           !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
         bool is_video = !check_h264_startcode(pkt);
         bool is_key = !is_video ||
                       ((pkt->data[4]&0x1f) == 5 ||

@@ -38,13 +38,13 @@ bool FLVParser::eof() const
 }
 
 int FLVParser::read_header(FLVHeader &hdr,
-        uint8_t *buf, uint32_t buf_size) const
+                           uint8_t *buf, uint32_t buf_size) const
 {
     if (!buf) {
-        if (!m_file.read_buffer(
-                    reinterpret_cast<uint8_t *>(&hdr),
-                    sizeof(FLVHeader))) {
-            LOGE("Read from file \"%s\" failed", m_file.get_path());
+        if (!m_file.read_buffer(reinterpret_cast<uint8_t *>(&hdr),
+                                sizeof(FLVHeader))) {
+            LOGE("Read from file \"%s\" failed",
+                 m_file.get_path());
             return -1;
         }
     } else {
@@ -69,7 +69,7 @@ int FLVParser::read_header(FLVHeader &hdr,
 
     if (hdr.dataoffset != 9) {
         LOGE("FLV version 1 should have 9 bytes flv_header, not %d bytes",
-            hdr.dataoffset);
+             hdr.dataoffset);
         return -1;
     }
     
@@ -105,7 +105,7 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
 {
     if (!buf) {
         if (!m_file.read_buffer(reinterpret_cast<uint8_t *>(&tag->hdr),
-                    sizeof(FLVTagHeader))) {
+                                sizeof(FLVTagHeader))) {
             LOGE("Read tag header failed");
             return -1;
         }
@@ -159,8 +159,8 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
     }
 
 #ifdef XDEBUG
-    LOGD("Tag type: %s", tag->hdr.typ == TAG_AUDIO ? "Audio" :
-           (tag->hdr.typ == TAG_VIDEO ? "Video" : "Script"));
+    LOGD("Tag type: %s", tag->hdr.typ == TAG_AUDIO ?
+            "Audio" : (tag->hdr.typ == TAG_VIDEO ? "Video" : "Script"));
     LOGD("Tag datasize: %u", VALUI24(tag->hdr.datasize));
     LOGD("Tag timestamp: %u", VALUI24(tag->hdr.timestamp));
     LOGD("Tag timestamp-extended: %u", tag->hdr.timestamp_ext);
@@ -183,8 +183,8 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
     if (prev_tag_size !=
             VALUI24(tag->hdr.datasize) + sizeof(FLVTagHeader)) {
         LOGE("Read \"Prev-Tag-Size\" failed, %u != %u + %u",
-                prev_tag_size,
-                VALUI24(tag->hdr.datasize), sizeof(FLVTagHeader));
+             prev_tag_size,
+             VALUI24(tag->hdr.datasize), sizeof(FLVTagHeader));
         return -1;
     }
 
@@ -193,7 +193,7 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
 }
 
 int FLVParser::handle_script(AMFData &script,
-        const byte strm[], uint32_t len)
+                             const byte strm[], uint32_t len)
 {
     const byte *p = strm;
 
@@ -229,7 +229,7 @@ int FLVParser::handle_script(AMFData &script,
 }
 
 int FLVParser::parse_avc(const byte *&p, uint32_t len,
-        FLVVideoTagData &vdat)
+                         FLVVideoTagData &vdat)
 {
     const byte *savep = p;
 
@@ -240,7 +240,7 @@ int FLVParser::parse_avc(const byte *&p, uint32_t len,
     if (vdat.pkt.pkt_typ != NALU &&
         VALUI24(vdat.pkt.compostion_time) != 0) {
         LOGE("AVCPktType %u should with 0 compostion_time, not %u",
-                vdat.pkt.pkt_typ, VALUI24(vdat.pkt.compostion_time));
+             vdat.pkt.pkt_typ, VALUI24(vdat.pkt.compostion_time));
         return -1;
     }
 
@@ -301,7 +301,7 @@ int FLVParser::parse_avc(const byte *&p, uint32_t len,
 }
 
 int FLVParser::handle_video(FLVVideoTagData &vdat,
-        const byte strm[], uint32_t len)
+                            const byte strm[], uint32_t len)
 {
     const byte *p = strm;
 
@@ -324,7 +324,7 @@ int FLVParser::handle_video(FLVVideoTagData &vdat,
 }
 
 int FLVParser::handle_audio(FLVAudioTagData &adat,
-        const byte strm[], uint32_t len)
+                            const byte strm[], uint32_t len)
 {
     const byte *p = strm;
 

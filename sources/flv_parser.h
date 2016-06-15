@@ -132,9 +132,9 @@ public:
 
 public:
     int read_header(FLVHeader &hdr,
-            uint8_t *buf = NULL, uint32_t buf_size = 0) const;
+                    uint8_t *buf = NULL, uint32_t buf_size = 0) const;
     int read_tag(FLVTag *&tag,
-            uint8_t *buf = NULL, uint32_t buf_size = 0);
+                 uint8_t *buf = NULL, uint32_t buf_size = 0);
     FLVTag *alloc_tag() const;
     int free_tag(FLVTag *&tag) const;
 
@@ -143,14 +143,14 @@ private:
     static int free_audio_tag_dat(FLVAudioTagData &adat);
 
     static int handle_script(amf::AMFData &script,
-            const byte strm[], uint32_t len);
+                             const byte strm[], uint32_t len);
     static int handle_video(FLVVideoTagData &vdat,
-            const byte strm[], uint32_t len);
+                            const byte strm[], uint32_t len);
     static int handle_audio(FLVAudioTagData &adat,
-            const byte strm[], uint32_t len);
+                            const byte strm[], uint32_t len);
 
     static int parse_avc(const byte *&p, uint32_t len,
-            FLVVideoTagData &vdat);
+                         FLVVideoTagData &vdat);
 
 private:
     xfile::File m_file;

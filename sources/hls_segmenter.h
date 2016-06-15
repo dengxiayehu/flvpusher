@@ -10,6 +10,8 @@ namespace flvpusher {
 
 class FLVParser;
 class MP4Parser;
+class VideoTagStreamer;
+class AudioTagStreamer;
 
 class HLSSegmenter {
 public:
@@ -54,8 +56,14 @@ private:
 
     MediaFormat m_mf;
     union {
-        FLVParser *flv_parser;
-        MP4Parser *mp4_parser;
+        struct {
+            FLVParser *parser;
+            VideoTagStreamer *vstrmer;
+            AudioTagStreamer *astrmer;
+        } flv;
+        struct {
+            MP4Parser *parser;
+        } mp4;
     } u;
 
     HLSInfo m_info;
