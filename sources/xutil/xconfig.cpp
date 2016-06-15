@@ -69,6 +69,7 @@ private:
     map<string, ConfigItem *> m_map;
     string m_path;
     RecursiveMutex m_mutex;
+    int m_ctl[2];
 };
 
 ConfigImpl::ConfigItem::ConfigItem() :
@@ -190,6 +191,7 @@ again:
 ConfigImpl::ConfigImpl() :
     m_thrd(NULL), m_quit_monitor(false)
 {
+    m_ctl[0] = m_ctl[1] = -1;
 }
 
 ConfigImpl::~ConfigImpl()
@@ -425,6 +427,10 @@ int ConfigImpl::start_monitor()
 int ConfigImpl::stop_monitor()
 {
     m_quit_monitor = true;
+    if (m_ctl[0] != -1) {
+        const char str[] = "wakeup";
+        send(m_ctl[0], str, sizeof(str), MSG_NOSIGNAL);
+    }
     JOIN_DELETE_THREAD(m_thrd);
     return 0;
 }
@@ -444,6 +450,10 @@ void *ConfigImpl::monitor_routine(void *arg)
         goto out;
     }
 
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, m_ctl) < 0) {
+        LOGE("socketpair failed for ctl: %s", ERRNOMSG);
+    }
+
     while (!m_quit_monitor) {
         if (wd < 0) {
             AutoLock _l(m_mutex);
@@ -457,11 +467,20 @@ void *ConfigImpl::monitor_routine(void *arg)
 
         FD_ZERO(&rfd);
         FD_SET(fd, &rfd);
+        if (m_ctl[1] != -1) FD_SET(m_ctl[1], &rfd);
         tv.tv_sec = 1; tv.tv_usec = 0;
-        int ret = select(fd + 1, &rfd, NULL, NULL, &tv);
+        int ret = select(MAX(fd, m_ctl[1]) + 1, &rfd, NULL, NULL, &tv);
         if (ret == 0) continue;
         else if (ret < 0) {
             LOGE("select() failed: %s", ERRNOMSG);
+            break;
+        }
+
+        if (m_quit_monitor)
+            break;
+
+        if (m_ctl[1] != -1 && FD_ISSET(m_ctl[1], &rfd)) {
+            n = read(m_ctl[1], buff, sizeof(buff));
             break;
         }
 
