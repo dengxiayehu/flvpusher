@@ -128,6 +128,9 @@ typedef uint64_t TagType;
 #define TAG_KIND_OF(tag,kind) ((bool)(((tag)&get_tag_mask((kind)))==(kind)))
 TagType get_tag_mask(TagType tag);
 
+int scandir(void *opaque, const char *path,
+            int (*cb)(void *, const char *));
+
 /////////////////////////////////////////////////////////////
 
 class Condition;

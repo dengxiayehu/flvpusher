@@ -15,6 +15,7 @@
 #include <ifaddrs.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #include "xlog.h"
 #include "xfile.h"
@@ -467,6 +468,37 @@ TagType get_tag_mask(TagType tag)
         result = result >> 8;
     }
     return ~result;
+}
+
+int scandir(void *opaque, const char *path,
+            int (*cb)(void *, const char *))
+{
+    DIR *dir;
+    struct dirent *dirent;
+    int ret = 0;
+
+    if (!path || !cb)
+        return -1;
+
+    dir = opendir(path);
+    if (!dir) {
+        LOGE("Open dir \"%s\" failed: %s\n",
+             path, ERRNOMSG);
+        return -1;
+    }
+
+    while (!ret &&
+           (dirent = readdir(dir))) {
+        if (!strcmp(dirent->d_name, ".") || !strcmp(dirent->d_name, ".."))
+            continue;
+
+        if (cb(opaque,
+               STR(sprintf_("%s%c%s", path, DIRSEP, dirent->d_name))) < 0)
+            ret = -1;
+    }
+
+    closedir(dir);
+    return ret;
 }
 
 /////////////////////////////////////////////////////////////

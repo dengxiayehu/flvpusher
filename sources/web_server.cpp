@@ -51,7 +51,8 @@ private:
     static int serve_auth(struct mg_connection *conn);
     static bool is_index(const char *uri);
     static int serve_stream(TagType type, const string &uri, struct mg_connection *conn);
-    static int recycle(const char *root);
+    int recycle(const char *root);
+    static int recycle_func(void *opaque, const char *path);
 
 private:
     DISALLOW_COPY_AND_ASSIGN(WebServerImpl);
@@ -447,7 +448,61 @@ void *WebServerImpl::recycle_routine(void *arg)
 
 int WebServerImpl::recycle(const char *root)
 {
-    return 0;
+    return scandir(this, root, recycle_func);
+}
+
+int WebServerImpl::recycle_func(void *opaque, const char *path)
+{
+    int ret = 0;
+
+    if (is_dir(path)) {
+        string info_file(sprintf_("%s%chls_info.txt", path, DIRSEP));
+        bool hls_content = is_file(info_file);
+        string check_file(sprintf_("%s%chls_check.txt", path, DIRSEP));
+        bool checking = hls_content && is_file(check_file);
+
+        if (!checking) {
+            if (hls_content) {
+                auto_ptr<File> f(new File);
+                if (!f->open(info_file, "rb"))
+                    return -1;
+
+                uint64_t access_time;
+                f->seek_to(1024 + 1);
+                f->readui64(&access_time);
+
+                int hls_expire_time = DEFAULT_HLS_EXPIRE_TIME;
+                if (IMPL(opaque)->m_conf) {
+                    GET_CONFIG_INT(IMPL(opaque)->m_conf, hls_expire_time);
+                }
+
+                uint64_t now = get_time_now();
+                if ((now - access_time)/1000 < (uint64_t) hls_expire_time) {
+                    return 0;
+                }
+
+                system_("touch %s", STR(check_file));
+            }
+
+            ret = IMPL(opaque)->recycle(path);
+
+            if (hls_content) {
+                rm_(check_file);
+            }
+        }
+    } else {
+        if (is_file(sprintf_("%s%chls_info.txt",
+                             STR(dirname_(path)), DIRSEP))) {
+            if (end_with(path, ".ts")) {
+                LOGD("Unlink \"%s\"", path);
+
+                if ((ret = unlink(path)) < 0) {
+                    LOGE("unlink \"%s\" failed: %s", path, ERRNOMSG);
+                }
+            }
+        }
+    }
+    return ret;
 }
 
 /////////////////////////////////////////////////////////////
