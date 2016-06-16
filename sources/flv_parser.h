@@ -14,6 +14,7 @@ using namespace xmedia;
 namespace flvpusher {
 
 class FLVParser {
+    friend class HLSSegmenter;
 public:
     FLVParser();
     ~FLVParser();

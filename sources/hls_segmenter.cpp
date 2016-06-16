@@ -48,6 +48,8 @@ HLSSegmenter::~HLSSegmenter()
 {
     if (m_mf == FLV) {
         SAFE_DELETE(u.flv.parser);
+        SAFE_DELETE(u.flv.vstrmer);
+        SAFE_DELETE(u.flv.astrmer);
     } else if (m_mf == MP4) {
         SAFE_DELETE(u.mp4.parser);
     }
@@ -77,6 +79,8 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
             ret = -1;
             goto out;
         }
+        u.flv.vstrmer = new VideoTagStreamer;
+        u.flv.astrmer = new AudioTagStreamer;
     } else {
         LOGE("Not support file:\"%s\" for hls-segmenter",
              STR(filename));
@@ -205,9 +209,56 @@ int HLSSegmenter::create_m3u8(bool create_ts)
             SAFE_DELETE(tsmuxer);
         info->segments.push_back((HLSSegment) {filename, info->duration});
     } else if (m_mf == FLV) {
+        VideoTagStreamer *vstrmer = u.flv.vstrmer;
+        AudioTagStreamer *astrmer = u.flv.astrmer;
+        FLVParser::ReadStatus rs;
+        UNUSED(rs);
         if (create_ts) {
             tsmuxer = new TSMuxer;
             tsmuxer->set_file(filename, (AVRational) {1001, 30000});
+        }
+        while (!m_quit && !u.flv.parser->eof()) {
+            FLVParser::FLVTag *tag = u.flv.parser->alloc_tag();
+            if (u.flv.parser->read_tag(tag) < 0) {
+                if (tag->hdr.typ == FLVParser::TAG_SCRIPT) {
+                    u.flv.parser->free_tag(tag);
+                    continue;
+                }
+
+                u.flv.parser->free_tag(tag);
+                break;
+            }
+
+            int32_t timestamp =
+                (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
+            UNUSED(timestamp);
+
+            switch (tag->hdr.typ) {
+            case FLVParser::TAG_VIDEO:
+                vstrmer->process(*tag);
+                if (vstrmer->get_strm_length() == 0) {
+                    seek_file->writeui8(vstrmer->m_sps_len);
+                    seek_file->write_buffer(vstrmer->m_sps, vstrmer->m_sps_len);
+                    seek_file->writeui8(vstrmer->m_pps_len);
+                    seek_file->write_buffer(vstrmer->m_pps, vstrmer->m_pps_len);
+                    break;
+                }
+                break;
+
+            case FLVParser::TAG_AUDIO:
+                astrmer->process(*tag);
+                if (astrmer->get_strm_length() == 0) {
+                    seek_file->write_buffer(astrmer->m_asc.dat, 2);
+                    break;
+                }
+                break;
+
+            case FLVParser::TAG_SCRIPT:
+            default:
+                break;
+            }
+
+            u.flv.parser->free_tag(tag);
         }
         if (create_ts)
             SAFE_DELETE(tsmuxer);

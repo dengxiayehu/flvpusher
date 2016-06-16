@@ -29,6 +29,7 @@ protected:
 /////////////////////////////////////////////////////////////
 
 class VideoTagStreamer : public TagStreamerBase {
+    friend class HLSSegmenter;
 public:
     VideoTagStreamer(const std::string &dump_path = "")
         : TagStreamerBase(dump_path), m_sps_len(0), m_pps_len(0) { }
@@ -45,6 +46,7 @@ private:
 /////////////////////////////////////////////////////////////
 
 class AudioTagStreamer : public TagStreamerBase {
+    friend class HLSSegmenter;
 public:
     AudioTagStreamer(const std::string &dump_path = "")
         : TagStreamerBase(dump_path) { }
