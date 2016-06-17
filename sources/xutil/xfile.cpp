@@ -339,6 +339,7 @@ bool File::write_buffer(const uint8_t *buffer, long len) const
         }
     }
 
+    m_filesz = ftello(m_fp);
     return true;
 }
 

@@ -56,9 +56,9 @@ public:
     static int flush_content(const std::string &path, const uint8_t *buf, int buf_size, const char *mode = "w");
 
 private:
-    FILE       *m_fp;
-    off_t       m_filesz;
-    std::string m_path;
+    FILE           *m_fp;
+    mutable off_t   m_filesz;
+    std::string     m_path;
 };
 
 }

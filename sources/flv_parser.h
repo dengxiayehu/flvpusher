@@ -163,7 +163,7 @@ private:
 
     xutil::MemHolder m_mem_holder;
 
-    ReadStatus m_status;
+    ReadStatus m_status[1];
 };
 
 }
