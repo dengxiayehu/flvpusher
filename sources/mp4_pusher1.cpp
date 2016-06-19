@@ -28,7 +28,7 @@ int MP4Pusher1::prepare()
 {
     m_parser = new MP4Parser;
     if (m_parser->set_file(STR(m_input)) < 0) {
-        LOGE("Load mp4 file \"%s\" failed", STR(m_input));
+        LOGE("Load file \"%s\" failed", STR(m_input));
         return -1;
     }
 
@@ -52,7 +52,7 @@ int MP4Pusher1::loop()
         return -1;
     }
     
-    LOGI("Pushing mp4 file \"%s\" ..", STR(m_input));
+    LOGI("Pushing file \"%s\" ..", STR(m_input));
 
     return m_parser->process(this, parsed_frame_cb);
 }
@@ -113,10 +113,8 @@ int MP4Pusher1::send_metadata()
     put_amf_string_no_typ(p, "height");
     put_amf_number(p, m_height);
     put_amf_obj_end(p);
-    return m_rtmp_hdl->send_rtmp_pkt(
-            RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
-            buff,
-            p - buff);
+    return m_rtmp_hdl->send_rtmp_pkt(RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
+                                     buff, p - buff);
 }
 
 }

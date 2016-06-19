@@ -564,6 +564,6 @@ void MP4Parser::print_ReadStatus(const ReadStatus &rs)
          rs.cnt_offset, rs.delta_offset, rs.pts.num, rs.pts.den, rs.shift_time, rs.sample_idx, rs.lcc.cached_sample_idx, rs.lcc.cached_entry_idx, rs.lcc.cached_total_samples, rs.sample_offset);
 }
 
-InputFormat MP4Parser::mp4_demuxer = { "mp4", sizeof(MP4Context), mp4_read_packet };
+InputFormat MP4Parser::mp4_demuxer = { "mp4|3gp", sizeof(MP4Context), mp4_read_packet };
 
 }

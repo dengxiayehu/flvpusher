@@ -347,7 +347,7 @@ int App::main(int argc, char *argv[])
                 m_pusher = new RtspSource(*it, m_rtmp_hdl);
             } else if (end_with(*it, ".flv")) {
                 m_pusher = new FLVPusher(*it, m_rtmp_hdl);
-            } else if (end_with(*it, ".mp4")) {
+            } else if (end_with(*it, ".mp4") || end_with(*it, ".3gp")) {
 #if defined (VERSION) && (VERSION > 1)
                 m_pusher = new MP4Pusher1(*it, m_rtmp_hdl);
 #else

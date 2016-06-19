@@ -28,7 +28,7 @@ int MP4Pusher::prepare()
 {
     m_parser = new MP4Parser;
     if (m_parser->set_file(STR(m_input)) < 0) {
-        LOGE("Load mp4 file \"%s\" failed", STR(m_input));
+        LOGE("Load file \"%s\" failed", STR(m_input));
         return -1;
     }
 
@@ -50,7 +50,7 @@ int MP4Pusher::loop()
         return -1;
     }
     
-    LOGI("Pushing mp4 file \"%s\" ..", STR(m_input));
+    LOGI("Pushing file \"%s\" ..", STR(m_input));
 
     // Send metadata pkt to rtmpserver
     if (!send_metadata()) {

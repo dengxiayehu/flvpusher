@@ -6,7 +6,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <xnet.h>
 
 #include "flv_parser.h"
 #include "tag_streamer.h"
@@ -15,10 +14,6 @@
 #include "hls_common.h"
 #include "config.h"
 
-#define SELECT_TIMEOUT      (10*1000*1000) // 10 secs
-#define MAX_NTIMEOUT        120
-
-using namespace xnet;
 using namespace xutil;
 using namespace std;
 
@@ -62,11 +57,11 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
         system_("mkdir -p \"%s\" 2>/dev/null", STR(dir));
 
     int ret = 0;
-    if (end_with(filename, ".mp4")) {
+    if (end_with(filename, ".mp4") || end_with(filename, ".3gp")) {
         m_mf = MP4;
         u.mp4.parser = new MP4Parser;
         if (u.mp4.parser->set_file(filename) < 0) {
-            LOGE("Load mp4 file \"%s\" failed", STR(filename));
+            LOGE("Load file \"%s\" failed", STR(filename));
             ret = -1;
             goto out;
         }
@@ -75,7 +70,7 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
         m_mf = FLV;
         u.flv.parser = new FLVParser;
         if (u.flv.parser->set_file(filename) < 0) {
-            LOGE("Load flv file \"%s\" failed", STR(filename));
+            LOGE("Load file \"%s\" failed", STR(filename));
             ret = -1;
             goto out;
         }
