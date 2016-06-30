@@ -36,7 +36,8 @@ int MP4Pusher1::prepare()
         LOGE("Get file's resolution failed");
         return -1;
     }
-    if (!send_metadata()) {
+    if (m_sink->type() == MediaSink::RTMP_SINK &&
+        !send_metadata()) {
         LOGE("Send metadata to rtmpserver failed (cont)");
     }
 
