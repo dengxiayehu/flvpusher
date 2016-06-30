@@ -167,7 +167,7 @@ uint32_t VideoRawParser::get_nalu_length(uint32_t idx) const
 {
     if (idx >= m_nalus.size()) {
         LOGE("idx %d out of nalu vector", idx);
-        return NULL;
+        return 0;
     }
 
     return m_nalus[idx]->first;

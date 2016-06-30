@@ -107,7 +107,7 @@ AVRational MP4Parser::get_vtime_base() const
 {
     const Track *trak = &m_track[VIDEO];
     return (AVRational) {
-        (int) trak->duration/trak->timescale,
+        (int) (trak->duration/trak->timescale),
         (int) trak->stsz->sample_count
     };
 }

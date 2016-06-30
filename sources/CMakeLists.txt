@@ -4,7 +4,7 @@ SET(MODULE_NAME flvpusher)
 
 PROJECT(${MODULE_NAME})
 
-ADD_DEFINITIONS(-ggdb3 -O0 -Wall -Werror)
+ADD_DEFINITIONS(-ggdb3 -O0 -Wall -Wno-unused-but-set-variable)
 
 INCLUDE_DIRECTORIES(
 	xutil
@@ -17,7 +17,7 @@ LINK_DIRECTORIES(
 
 FILE(GLOB SOURCES "*.cpp" "xutil/*.cpp")
 
-SET(DEPEND_MODULES pthread dl libssl.a libcrypto.a libz.a libcurl.a librtmp.a dl rt libmongoose.a)
+SET(DEPEND_MODULES pthread librtmp.a libcurl.a libmongoose.a libssl.a libcrypto.a libz.a dl rt)
 
 ADD_EXECUTABLE(${MODULE_NAME} ${SOURCES})
 TARGET_LINK_LIBRARIES(${MODULE_NAME} ${DEPEND_MODULES})
