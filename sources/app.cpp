@@ -21,6 +21,7 @@
 #include "web_server.h"
 #include "hls_segmenter.h"
 #include "rtmp_handler.h"
+#include "rtsp_sink.h"
 
 using namespace xutil;
 using namespace xconfig;
