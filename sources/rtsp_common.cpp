@@ -1,11 +1,10 @@
-#include "rtsp_common.h"
-
 #include <memory>
 #include <xlog.h>
 #include <get_bits.h>
 #include <xmedia.h>
 #include <amf.h>
 
+#include "rtsp_common.h"
 #include "media_pusher.h"
 
 //#define XDEBUG
@@ -24,9 +23,9 @@ static TaskScheduler *g_scheduler = NULL;
 std::string RtspUrl::to_string() const
 {
     return sprintf_("rtsp://%s%s/%s",
-            username.empty() ? "" : STR(username + ":" + passwd + "@"),
-            STR(srvap.to_string()),
-            STR(stream_name));
+                    username.empty() ? "" : STR(username + ":" + passwd + "@"),
+                    STR(srvap.to_string()),
+                    STR(stream_name));
 }
 
 RtspRecvBuf::RtspRecvBuf()
@@ -400,7 +399,7 @@ void Rtcp::send_sdes()
 MultiFramedRTPSource::MultiFramedRTPSource(Udp *udp,
         unsigned char rtp_payload_format,
         unsigned rtp_timestamp_frequency,
-        MediaPusher *mp) :
+        void *opaque) :
     m_udp(udp),
     m_rtp_payload_format(rtp_payload_format),
     m_rtp_timestamp_frequency(rtp_timestamp_frequency),
@@ -412,7 +411,7 @@ MultiFramedRTPSource::MultiFramedRTPSource(Udp *udp,
     m_last_received_seq_num(0),
     m_last_received_timestamp(0),
     m_start_complete_timestamp(0),
-    m_mp(mp)
+    m_opaque(opaque)
 {
 }
 
@@ -597,8 +596,8 @@ SPropRecord *parse_s_prop_parm_str(const char *parm_str, unsigned &num_s_prop_re
 
 H264VideoRTPSource::H264VideoRTPSource(Udp *udp,
         unsigned char rtp_payload_format, unsigned rtp_timestamp_frequency,
-        const char *s_prop_parm_str, MediaPusher *mp) :
-    MultiFramedRTPSource(udp, rtp_payload_format, rtp_timestamp_frequency, mp),
+        const char *s_prop_parm_str, void *opaque) :
+    MultiFramedRTPSource(udp, rtp_payload_format, rtp_timestamp_frequency, opaque),
     m_sps(NULL), m_sps_size(0), m_pps(NULL), m_pps_size(0)
 {
     unsigned num_s_prop_records;
@@ -708,10 +707,9 @@ int H264VideoRTPSource::on_complete_frame1(FrameBuffer *frame)
             frame->timestamp(), bytes_max, nwritten);
 #endif
 
-    if (m_mp) {
-        m_mp->on_frame(
-                ((frame->timestamp()-m_start_complete_timestamp)/(double)m_rtp_timestamp_frequency)*1000,
-                buf, nwritten, 1);
+    if (m_opaque) {
+        ((MediaPusher *) m_opaque)->on_frame(((frame->timestamp()-m_start_complete_timestamp)/(double)m_rtp_timestamp_frequency)*1000,
+                                             buf, nwritten, 1);
     }
 
     if (m_file.is_opened())
@@ -727,8 +725,8 @@ MPEG4GenericRTPSource::MPEG4GenericRTPSource(Udp *udp,
         unsigned size_length, unsigned index_length,
         unsigned index_delta_length,
         const char *fmtp_config,
-        MediaPusher *mp) :
-    MultiFramedRTPSource(udp, rtp_payload_format, rtp_timestamp_frequency, mp),
+        void *opaque) :
+    MultiFramedRTPSource(udp, rtp_payload_format, rtp_timestamp_frequency, opaque),
     m_size_length(size_length), m_index_length(index_length),
     m_index_delta_length(index_delta_length),
     m_num_au_headers(0), m_next_au_header(0), m_au_headers(NULL)
@@ -924,10 +922,9 @@ int MPEG4GenericRTPSource::on_complete_frame1(FrameBuffer *frame)
            frame->timestamp(), nwritten);
 #endif
 
-    if (m_mp) {
-        m_mp->on_frame(
-                ((frame->timestamp()-m_start_complete_timestamp)/(double)m_rtp_timestamp_frequency)*1000,
-                buf, nwritten, 0);
+    if (m_opaque) {
+        ((MediaPusher *) m_opaque)->on_frame(((frame->timestamp()-m_start_complete_timestamp)/(double)m_rtp_timestamp_frequency)*1000,
+                                             buf, nwritten, 0);
     }
 
     if (m_file.is_opened())
@@ -1306,7 +1303,7 @@ void HandlerSet::move_handler(int old_socket_num, int new_socket_num)
     }
 }
 
-RtspClient::RtspClient(MediaPusher *mp) :
+RtspClient::RtspClient(void *opaque) :
     m_user_agent_str(DEFAULT_USER_AGENT),
     m_base_url(NULL),
     m_desired_max_incoming_packet_size(0),
@@ -1317,7 +1314,7 @@ RtspClient::RtspClient(MediaPusher *mp) :
     m_stream_timer_task(NULL),
     m_sess(NULL),
     m_server_supports_get_parameter(false),
-    m_mp(mp)
+    m_opaque(opaque)
 {
     if (!g_scheduler) {
         g_scheduler = new TaskScheduler;
@@ -1676,7 +1673,7 @@ string RtspClient::generate_cmd_url(const char *base_url,
 
 int RtspClient::request_setup(const std::string &sdp)
 {
-    m_sess = MediaSession::create_new(STR(sdp), m_mp);
+    m_sess = MediaSession::create_new(STR(sdp), m_opaque);
     if (!m_sess) {
         LOGE("Create MediaSession failed");
         return -1;
@@ -2104,7 +2101,7 @@ SDPAttribute::~SDPAttribute() {
     SAFE_FREE(m_str_value_to_lower);
 }
 
-MediaSession::MediaSession(MediaPusher *mp) :
+MediaSession::MediaSession(void *opaque) :
     m_sess_name(NULL),
     m_sess_desc(NULL),
     m_conn_endpoint_name(NULL),
@@ -2115,7 +2112,7 @@ MediaSession::MediaSession(MediaPusher *mp) :
     m_abs_start_time(NULL),
     m_abs_end_time(NULL),
     m_scale(1.0f),
-    m_mp(mp)
+    m_opaque(opaque)
 {
     char CNAME[128] = {0};
     gethostname(CNAME, sizeof(CNAME));
@@ -2417,9 +2414,9 @@ int MediaSession::parse_sdp_attr_source_filter(const char *sdp_line)
     return parse_source_filter_attr(sdp_line, m_source_filter_name);
 }
 
-MediaSession *MediaSession::create_new(const char *sdp, MediaPusher *mp)
+MediaSession *MediaSession::create_new(const char *sdp, void *opaque)
 {
-    MediaSession *new_session = new MediaSession(mp);
+    MediaSession *new_session = new MediaSession(opaque);
     if (new_session) {
         if (new_session->initialize_with_sdp(sdp) < 0) {
             SAFE_DELETE(new_session);
@@ -2931,7 +2928,7 @@ int MediaSubsession::create_source_object()
                 m_rtp_source = new H264VideoRTPSource(m_rtp_socket,
                         m_rtp_payload_format, m_rtp_timestamp_frequency,
                         attr_val_str("sprop-parameter-sets"),
-                        parent_session().media_pusher());
+                        parent_session().opaque());
             } else if (!strcmp(m_codec_name, "MPEG4-GENERIC")) {
                 const char *fmtp_config = attr_val_str("config");
                 if (!strlen(fmtp_config)) fmtp_config = attr_val_str("configuration");
@@ -2942,7 +2939,7 @@ int MediaSubsession::create_source_object()
                         attr_val_unsigned("indexlength"),
                         attr_val_unsigned("indexdeltalength"),
                         fmtp_config,
-                        parent_session().media_pusher());
+                        parent_session().opaque());
             } else {
                 LOGE("RTP payload format \"%s\" unknown or not supported",
                         m_codec_name);

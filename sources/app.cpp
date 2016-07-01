@@ -259,9 +259,9 @@ void App::usage() const
 int App::prepare()
 {
     if (!m_liveurl.empty()) {
-        if (start_with(m_liveurl, "rtmp")) {
+        if (start_with(m_liveurl, "rtmp://")) {
             m_sink = new RtmpSink(m_flvpath);
-        } else if (start_with(m_liveurl, "rtsp")) {
+        } else if (start_with(m_liveurl, "rtsp://")) {
             m_sink = new RtspSink(m_flvpath);
         }
         if (m_sink->connect(m_liveurl) < 0)

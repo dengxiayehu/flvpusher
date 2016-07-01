@@ -166,12 +166,10 @@ private:
     TaskToken m_on_expire_task;
 };
 
-class MediaPusher;
-
 class MultiFramedRTPSource {
 public:
     MultiFramedRTPSource(Udp *udp, unsigned char rtp_payload_format,
-            unsigned rtp_timestamp_frequency, MediaPusher *mp = NULL);
+                         unsigned rtp_timestamp_frequency, void *opaque = NULL);
     virtual ~MultiFramedRTPSource();
 
     int start_receiving();
@@ -181,7 +179,7 @@ public:
 
 protected:
     virtual bool process_special_header(uint8_t *payload, unsigned payload_len,
-            bool marker_bit, unsigned &result_special_header_size) = 0;
+                                        bool marker_bit, unsigned &result_special_header_size) = 0;
     virtual const char *MIME_type() const = 0;
     virtual const unsigned next_enclosed_frame_size(unsigned data_size) { return data_size; }
     virtual const CodecID codec_id() const = 0;
@@ -210,7 +208,7 @@ protected:
     xutil::MemHolder m_mem_holder;
     xfile::File m_file;
     uint32_t m_start_complete_timestamp;
-    MediaPusher *m_mp;
+    void *m_opaque;
 };
 
 class SPropRecord {
@@ -229,13 +227,13 @@ private:
 class H264VideoRTPSource : public MultiFramedRTPSource {
 public:
     H264VideoRTPSource(Udp *udp, unsigned char rtp_payload_format,
-            unsigned rtp_timestamp_frequency, const char *s_prop_parm_str = NULL,
-            MediaPusher *mp = NULL);
+                       unsigned rtp_timestamp_frequency, const char *s_prop_parm_str = NULL,
+                       void *opaque = NULL);
     virtual ~H264VideoRTPSource();
 
 protected:
     virtual bool process_special_header(uint8_t *payload, unsigned payload_len,
-            bool marker_bit, unsigned &result_special_header_size);
+                                        bool marker_bit, unsigned &result_special_header_size);
     virtual const char *MIME_type() const { return "video/H264"; }
     virtual const CodecID codec_id() const { return CODEC_ID_H264; }
     virtual int on_complete_frame1(FrameBuffer *frame);
@@ -251,19 +249,19 @@ private:
 class MPEG4GenericRTPSource : public MultiFramedRTPSource {
 public:
     MPEG4GenericRTPSource(Udp *udp,
-            unsigned char rtp_payload_format,
-            unsigned rtp_timestamp_frequency,
-            const char *medium_name,
-            const char *mode,
-            unsigned size_length, unsigned index_length,
-            unsigned index_delta_length,
-            const char *fmtp_config,
-            MediaPusher *mp = NULL);
+                          unsigned char rtp_payload_format,
+                          unsigned rtp_timestamp_frequency,
+                          const char *medium_name,
+                          const char *mode,
+                          unsigned size_length, unsigned index_length,
+                          unsigned index_delta_length,
+                          const char *fmtp_config,
+                          void *opaque = NULL);
     virtual ~MPEG4GenericRTPSource();
 
 protected:
     virtual bool process_special_header(uint8_t *payload, unsigned payload_len,
-            bool marker_bit, unsigned &result_special_header_size);
+                                        bool marker_bit, unsigned &result_special_header_size);
     virtual const char *MIME_type() const { return m_MIME_type; }
     virtual const unsigned next_enclosed_frame_size(unsigned data_size);
     virtual const CodecID codec_id() const { return CODEC_ID_AAC; }
@@ -436,18 +434,18 @@ public:
     int single_step(unsigned max_delay_time = 10000);
 
     void turn_on_background_read_handling(int socket_num,
-            BackgroundHandlerProc *handler_proc, void *client_data)
+                                          BackgroundHandlerProc *handler_proc, void *client_data)
     { set_background_handling(socket_num, SOCKET_READABLE, handler_proc, client_data); }
     void turn_off_background_read_handling(int socket_num)
     { disable_background_handling(socket_num); }
 
     void set_background_handling(int socket_num,
-            int condition_set, BackgroundHandlerProc *handler_proc, void *client_data);
+                                 int condition_set, BackgroundHandlerProc *handler_proc, void *client_data);
     void disable_background_handling(int socket_num)
     { set_background_handling(socket_num, 0, NULL, NULL); }
 
     TaskToken schedule_delayed_task(int64_t microseconds, TaskFunc *proc,
-            void *client_data);
+                                    void *client_data);
     void unschedule_delayed_task(TaskToken &prev_task);
 
 private:
@@ -475,7 +473,7 @@ public:
     virtual ~HandlerSet();
 
     void assign_handler(int socket_num, int condition_set,
-            TaskScheduler::BackgroundHandlerProc *handler_proc, void *client_data);
+                        TaskScheduler::BackgroundHandlerProc *handler_proc, void *client_data);
     void clear_handler(int socket_num);
     void move_handler(int old_socket_num, int new_socket_num);
 
@@ -513,7 +511,7 @@ private:
     };
 
 public:
-    RtspClient(MediaPusher *mp = NULL);
+    RtspClient(void *opaque = NULL);
     virtual ~RtspClient();
 
     int open(const std::string &url, AddressPort &ap);
@@ -529,16 +527,16 @@ public:
     int request_get_parameter(TaskFunc *proc = NULL);
 
     int request_setup(MediaSubsession &subsession,
-            bool stream_outgoing = false,
-            bool stream_using_tcp = false,
-            bool force_multicast_on_unspecified = false);
+                      bool stream_outgoing = false,
+                      bool stream_using_tcp = false,
+                      bool force_multicast_on_unspecified = false);
     int request_play(MediaSession &session,
-            double start = 0.0f, double end = -1.0f, float scale = 1.0f);
+                     double start = 0.0f, double end = -1.0f, float scale = 1.0f);
 
     void construct_subsession_url(MediaSubsession const &subsession,
-            const char *&prefix,
-            const char *&separator,
-            const char *&suffix);
+                                  const char *&prefix,
+                                  const char *&separator,
+                                  const char *&suffix);
     const char *session_url(MediaSession const &session) const;
 
     void set_user_agent_str(const std::string &user_agent_str)
@@ -555,18 +553,18 @@ public:
 private:
     static char *get_line(char *start_of_line);
     static bool parse_response_code(char *line,
-            unsigned &response_code, char *&response_string);
+                                    unsigned &response_code, char *&response_string);
     static bool check_for_header(char *line,
-            char const *header_name, unsigned header_name_length,
-            char *&header_parm);
+                                 char const *header_name, unsigned header_name_length,
+                                 char *&header_parm);
 
     int parse_transport_parms(const char *parms_str,
-            char *&server_address_str, PortNumBits &server_port_num);
+                              char *&server_address_str, PortNumBits &server_port_num);
 
     char *create_blocksize_string(bool stream_using_tcp);
 
     std::string generate_cmd_url(const char *base_url,
-            MediaSession *session = NULL, MediaSubsession *subsession = NULL);
+                                 MediaSession *session = NULL, MediaSubsession *subsession = NULL);
 
     void schedule_liveness_command();
     static void send_liveness_command(void *client_data);
@@ -575,7 +573,7 @@ private:
     static void shutdown_stream(RtspClient *rtsp_client);
 
     static bool rtsp_option_is_supported(const char *command_name,
-            const char *public_parm_str);
+                                         const char *public_parm_str);
 
 private:
     RtspRecvBuf m_rrb;
@@ -589,7 +587,7 @@ private:
     TaskToken m_stream_timer_task;
     MediaSession *m_sess;
     bool m_server_supports_get_parameter;
-    MediaPusher *m_mp;
+    void *m_opaque;
 };
 
 class SDPAttribute {
@@ -611,7 +609,7 @@ private:
 
 class MediaSession {
 public:
-    MediaSession(MediaPusher *mp = NULL);
+    MediaSession(void *opaque = NULL);
     ~MediaSession();
 
     int initialize_with_sdp(const std::string &sdp);
@@ -630,11 +628,10 @@ public:
     int play_subsessions(RtspClient *rtsp_client);
     int enable_subsessions_data();
 
-    static MediaSession *create_new(const char *sdp, MediaPusher *mp = NULL);
+    static MediaSession *create_new(const char *sdp, void *opaque = NULL);
     static char *lookup_payload_format(unsigned char rtp_payload_type,
-            unsigned &freq, unsigned &nchannel);
-    static unsigned guess_rtp_timestamp_frequency(
-            const char *medium_name, const char *codec_name);
+                                       unsigned &freq, unsigned &nchannel);
+    static unsigned guess_rtp_timestamp_frequency(const char *medium_name, const char *codec_name);
 
     double &play_start_time() { return m_max_play_start_time; }
     double &play_end_time() { return m_max_play_end_time; }
@@ -645,7 +642,7 @@ public:
     float &scale() { return m_scale; }
     const char *CNAME() const { return m_cname; }
 
-    MediaPusher *&media_pusher() { return m_mp; }
+    void *&opaque() { return m_opaque; }
 
 private:
     char *m_sess_name;
@@ -661,7 +658,7 @@ private:
     char *m_abs_end_time;
     float m_scale;
     char *m_cname;
-    MediaPusher *m_mp;
+    void *m_opaque;
 };
 
 class MediaSubsession {

@@ -1,14 +1,19 @@
+#include <xlog.h>
+
 #include "rtsp_sink.h"
+#include "rtsp_common.h"
 
 namespace flvpusher {
 
 RtspSink::RtspSink(const std::string &flvpath) :
     MediaSink(flvpath)
 {
+    m_client = new RtspClient(NULL);
 }
 
 RtspSink::~RtspSink()
 {
+    SAFE_DELETE(m_client);
 }
 
 MediaSink::Type RtspSink::type() const
