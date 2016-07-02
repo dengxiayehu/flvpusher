@@ -5,8 +5,13 @@
 
 namespace flvpusher {
 
+class SubstreamDescriptor {
+};
+
+/////////////////////////////////////////////////////////////
+
 RtspSink::RtspSink(const std::string &flvpath) :
-    MediaSink(flvpath)
+    MediaSink(flvpath), m_last_track_id(0)
 {
     m_client = new RtspClient(NULL);
 }
@@ -23,6 +28,16 @@ MediaSink::Type RtspSink::type() const
 
 int RtspSink::connect(const std::string &liveurl)
 {
+    AddressPort ap(our_ip(), 0);
+    if (m_client->open(liveurl, ap) < 0)
+        return -1;
+
+    if (m_client->request_options(
+                (TaskFunc *) RtspClient::continue_after_option) < 0) {
+        LOGE("Failed to send OPTION command");
+        return -1;
+    }
+
     return 0;
 }
 

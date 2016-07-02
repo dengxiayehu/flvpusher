@@ -5,6 +5,8 @@
 
 namespace flvpusher {
 
+class SubstreamDescriptor;
+
 class RtspClient;
 
 class RtspSink : public MediaSink {
@@ -22,6 +24,8 @@ public:
 
 private:
     RtspClient *m_client;
+    std::vector<SubstreamDescriptor *> m_substream_sdp;
+    unsigned m_last_track_id;
 };
 
 }

@@ -262,6 +262,10 @@ int App::prepare()
         if (start_with(m_liveurl, "rtmp://")) {
             m_sink = new RtmpSink(m_flvpath);
         } else if (start_with(m_liveurl, "rtsp://")) {
+            if (!end_with(m_liveurl, ".sdp")) {
+                LOGE("Invalid rtsp live url: \"%s\"", STR(m_liveurl));
+                return -1;
+            }
             m_sink = new RtspSink(m_flvpath);
         }
         if (m_sink->connect(m_liveurl) < 0)

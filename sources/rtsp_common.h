@@ -748,6 +748,120 @@ private:
 
 SPropRecord *parse_s_prop_parm_str(const char *parm_str, unsigned &num_s_prop_records);
 
+class RtpSink {
+public:
+    uint8_t rtp_payload_type() const { return m_rtp_payload_type; }
+    unsigned rtp_timestamp_frequency() const { return m_rtp_timestamp_frequency; }
+    void set_rtp_timestamp_frequency(unsigned freq)
+    { m_rtp_timestamp_frequency = freq; }
+    const char *rtp_payload_format_name() const { return m_rtp_payload_format_name; }
+
+    unsigned num_channels() const { return m_num_channels; }
+
+    virtual char const *sdp_media_type() const;
+    virtual char *rtpmap_line() const;
+    virtual char const *aux_sdp_line();
+
+    uint16_t current_seq_num() const { return m_seq_num; }
+    uint32_t preset_next_timestamp();
+
+    struct timeval const &creation_time() const { return m_creation_time; }
+
+protected:
+    RtpSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
+            const char *rtp_payload_format_name, unsigned num_channels);
+    virtual ~RtpSink();
+
+    uint32_t ssrc() const { return m_ssrc; }
+    uint32_t convert_to_rtp_timestamp(struct timeval tv);
+
+private:
+    static uint32_t random32();
+
+protected:
+    Udp *m_udp;
+    uint8_t m_rtp_payload_type;
+    uint64_t m_current_timestamp;
+    uint16_t m_seq_num;
+
+private:
+    DISALLOW_COPY_AND_ASSIGN(RtpSink);
+    uint32_t m_ssrc, m_timestamp_base;
+    uint32_t m_rtp_timestamp_frequency;
+    bool m_next_timestamp_has_been_preset;
+    const char *m_rtp_payload_format_name;
+    unsigned m_num_channels;
+    struct timeval m_creation_time;
+};
+
+class MultiFramedRTPSink : public RtpSink {
+public:
+    void set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size);
+
+protected:
+    MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type,
+                       unsigned rtp_timestamp_frequency,
+                       const char *rtp_payload_format_name,
+                       unsigned num_channels = 1);
+    virtual ~MultiFramedRTPSink();
+};
+
+class OutPacketBuffer {
+public:
+    OutPacketBuffer(unsigned preferred_packet_size, unsigned max_packet_size,
+                    unsigned max_buffer_size = 0);
+    ~OutPacketBuffer();
+
+    static unsigned max_size;
+    static void increase_max_size_to(unsigned new_max_size)
+    { if (new_max_size > OutPacketBuffer::max_size) OutPacketBuffer::max_size = new_max_size; }
+
+    unsigned char *cur_ptr() const { return &m_buf[m_packet_start + m_cur_offset]; }
+    unsigned total_bytes_available() const { return m_limit - (m_packet_start + m_cur_offset); }
+    unsigned total_buffer_size() const { return m_limit; }
+    unsigned char *packet() const { return &m_buf[m_packet_start]; }
+    unsigned cur_packet_size() const { return m_cur_offset; }
+
+    void increment(unsigned num_bytes) { m_cur_offset += num_bytes; }
+
+    void enqueue(unsigned char const *from, unsigned num_bytes);
+    void enqueue_word(uint32_t word);
+    void insert(unsigned char const *from, unsigned num_bytes, unsigned to_position);
+    void insert_word(uint32_t word, unsigned to_position);
+    void extract(unsigned char *to, unsigned num_bytes, unsigned from_position);
+    uint32_t extract_word(unsigned from_position);
+
+    void skip_bytes(unsigned num_bytes);
+
+    bool is_preferred_size() const { return m_cur_offset >= m_preferred; }
+    bool would_overflow(unsigned num_bytes) const {  return m_cur_offset + num_bytes > m_max; }
+    unsigned num_overflow_bytes(unsigned num_bytes) const { return m_cur_offset + num_bytes - m_max; }
+    bool is_too_big_for_a_packet(unsigned num_bytes) const { return num_bytes > m_max; }
+
+    void set_overflow_data(unsigned overflow_data_offset, unsigned overflow_data_size,
+                           struct timeval const &presentation_time,
+                           unsigned duration_in_microseconds);
+    unsigned overflow_data_size() const { return m_overflow_data_size; }
+    struct timeval overflow_presentation_time() const { return m_overflow_presentation_time; }
+    unsigned overflow_duration_in_microseconds() const { return m_overflow_duration_in_microseconds; }
+    bool have_overflow_data() const { return m_overflow_data_size > 0; }
+    void use_overflow_data();
+
+    void adjust_packet_start(unsigned num_bytes);
+    void reset_packet_start();
+    void reset_offset() { m_cur_offset = 0; }
+    void reset_overflow_data()
+    { m_overflow_data_offset = m_overflow_data_size = 0; }
+
+private:
+    unsigned m_packet_start, m_cur_offset, m_preferred, m_max, m_limit;
+    unsigned char *m_buf;
+
+    unsigned m_overflow_data_offset, m_overflow_data_size;
+    struct timeval m_overflow_presentation_time;
+    unsigned m_overflow_duration_in_microseconds;
+};
+
 }
 
 #endif /* end of _RTSP_COMMON_H_ */
