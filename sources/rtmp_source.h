@@ -10,13 +10,11 @@ using namespace xmedia;
 
 namespace flvpusher {
 
-class RtmpHandler;
 class TagStreamerBase;
 
 class RtmpSource : public MediaPusher {
 public:
-    RtmpSource(const std::string &input,
-            RtmpHandler *&rtmp_hdl);
+    RtmpSource(const std::string &input, MediaSink *&sink);
     virtual ~RtmpSource();
 
     virtual int loop();

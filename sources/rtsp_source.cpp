@@ -3,15 +3,14 @@
 #include <xlog.h>
 
 #include "rtsp_common.h"
-#include "rtmp_handler.h"
+#include "media_sink.h"
 
 using namespace std;
 
 namespace flvpusher {
 
-RtspSource::RtspSource(const std::string &input,
-        RtmpHandler *&rtmp_hdl) :
-    MediaPusher(input, rtmp_hdl)
+RtspSource::RtspSource(const std::string &input, MediaSink *&sink) :
+    MediaPusher(input, sink)
 {
     m_client = new RtspClient(this);
 }
@@ -45,7 +44,7 @@ int RtspSource::prepare()
 
     string sdp;
     if (m_client->request_describe(sdp,
-                (TaskFunc *) RtspClient::continue_after_describe) < 0) {
+                                   (TaskFunc *) RtspClient::continue_after_describe) < 0) {
         LOGE("Failed to send DESCRIBE command");
         return -1;
     }
@@ -69,9 +68,9 @@ int RtspSource::on_frame(const int32_t ts,
     MediaPusher::on_frame(ts, dat, dat_len, is_video);
 
     if (is_video)
-        return m_rtmp_hdl->send_video(ts, (byte *) dat, dat_len);
+        return m_sink->send_video(ts, (byte *) dat, dat_len);
     else
-        return m_rtmp_hdl->send_audio(ts, (byte *) dat, dat_len);
+        return m_sink->send_audio(ts, (byte *) dat, dat_len);
 }
 
 }

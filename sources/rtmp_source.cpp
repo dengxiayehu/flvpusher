@@ -6,7 +6,8 @@
 
 #include "flv_parser.h"
 #include "tag_streamer.h"
-#include "rtmp_handler.h"
+#include "media_sink.h"
+#include "rtmp_sink.h"
 #include "config.h"
 
 //#define XDEBUG
@@ -15,9 +16,8 @@ using namespace xutil;
 
 namespace flvpusher {
 
-RtmpSource::RtmpSource(const std::string &input,
-        RtmpHandler *&rtmp_hdl) :
-    MediaPusher(input, rtmp_hdl),
+RtmpSource::RtmpSource(const std::string &input, MediaSink *&sink) :
+    MediaPusher(input, sink),
     m_rtmp(NULL), m_buffer_time(RTMP_DEF_BUFTIME)
 {
     m_vstrmer = new VideoTagStreamer();
@@ -43,7 +43,7 @@ int RtmpSource::prepare()
     m_rtmp = RTMP_Alloc();
     if (!m_rtmp) {
         LOGE("RTMP_Alloc() failed for source: \"%s\"",
-                STR(m_input));
+             STR(m_input));
         return -1;
     }
 
@@ -62,7 +62,7 @@ int RtmpSource::prepare()
                 &parsed_host, &parsed_port,
                 &parsed_playpath, &parsed_app))) {
         LOGE("Couldn't parse the specified source: \"%s\"",
-                STR(m_input));
+             STR(m_input));
         goto out;
     }
 
@@ -84,18 +84,18 @@ int RtmpSource::prepare()
 
     if (!(ret = RTMP_Connect(m_rtmp, NULL))) {
         LOGE("RTMP_Connect failed for source: \"%s\"",
-                STR(m_input));
+             STR(m_input));
         goto out;
     }
 
     if (!(ret = RTMP_ConnectStream(m_rtmp, 0))) {
         LOGE("RTMP_ConnectStream failed for source: \"%s\"",
-                STR(m_input));
+             STR(m_input));
         goto out;
     }
 
     LOGI("Connect to rtmp source with url \"%s\" ok",
-            STR(m_input));
+         STR(m_input));
 out:
     SAFE_FREE(parsed_playpath.av_val);
     if (!ret)
@@ -108,7 +108,7 @@ int RtmpSource::disconnect()
     if (m_rtmp) {
         if (RTMP_IsConnected(m_rtmp)) {
             LOGI("Try to disconnect from source.. (url: %s)",
-                    STR(m_input));
+                 STR(m_input));
         }
 
         RTMP_Close(m_rtmp);
@@ -150,7 +150,7 @@ int RtmpSource::loop()
                     m_buffer_time = (uint32_t) (duration * 1000.0) + 5000;
 
                     LOGD("Detected that buffer time is less than duration, resetting to: %ums",
-                            m_buffer_time);
+                         m_buffer_time);
                     RTMP_SetBufferMS(m_rtmp, m_buffer_time);
                     RTMP_UpdateBufferMS(m_rtmp);
                 }
@@ -171,7 +171,7 @@ int RtmpSource::loop()
             while (nread > 0) { // Cover multi-tag in one RTMP_Read()
                 FLVParser::FLVTag *tag = parser.alloc_tag();
                 if ((nprocessed = parser.read_tag(tag,
-                            (uint8_t *) (buf + offset), nread)) < 0) {
+                                                  (uint8_t *) (buf + offset), nread)) < 0) {
                     LOGE("Read FLV tag failed");
                     return -1;
                 }
@@ -206,11 +206,10 @@ int RtmpSource::loop()
                     LOGD("VIDEO timestamp is: %d", timestamp);
 #endif
                     on_frame(timestamp,
-                            m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1);
-                    if (m_rtmp_hdl->send_video(
-                                timestamp,
-                                m_vstrmer->get_strm(),
-                                m_vstrmer->get_strm_length()) < 0) {
+                             m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1);
+                    if (m_sink->send_video(timestamp,
+                                           m_vstrmer->get_strm(),
+                                           m_vstrmer->get_strm_length()) < 0) {
                         LOGE("Send video data to rtmpserver failed");
                         m_quit = true;
                     }
@@ -223,9 +222,9 @@ int RtmpSource::loop()
                         AudioSpecificConfig asc = tag->dat.audio.aac.asc;
                         uint8_t profile, samplerate_idx, channel;
                         if (parse_asc(asc,
-                                    profile, samplerate_idx, channel) < 0) {
+                                      profile, samplerate_idx, channel) < 0) {
                             LOGE("Parse asc(%02x %02x) failed",
-                                    asc.dat[0], asc.dat[1]);
+                                 asc.dat[0], asc.dat[1]);
                             break;
                         }
                         m_info.samplerate =
@@ -239,11 +238,10 @@ int RtmpSource::loop()
                     LOGD("AUDIO timestamp is: %d", timestamp);
 #endif
                     on_frame(timestamp,
-                            m_astrmer->get_strm(), m_astrmer->get_strm_length(), 0);
-                    if (m_rtmp_hdl->send_audio(
-                                timestamp,
-                                m_astrmer->get_strm(),
-                                m_astrmer->get_strm_length()) < 0) {
+                             m_astrmer->get_strm(), m_astrmer->get_strm_length(), 0);
+                    if (m_sink->send_audio(timestamp,
+                                           m_astrmer->get_strm(),
+                                           m_astrmer->get_strm_length()) < 0) {
                         LOGE("Send audio data to rtmpserver failed");
                         m_quit = true;
                     }
@@ -251,10 +249,9 @@ int RtmpSource::loop()
 
                 case FLVParser::TAG_SCRIPT:
                     m_sstrmer->process(*tag);
-                    if (!m_rtmp_hdl->send_rtmp_pkt(
-                                RTMP_PACKET_TYPE_INFO, 0,
-                                m_sstrmer->get_strm(),
-                                m_sstrmer->get_strm_length())) {
+                    if (m_sink->type() == MediaSink::RTMP_SINK &&
+                        !((RtmpSink *) m_sink)->send_rtmp_pkt(RTMP_PACKET_TYPE_INFO, 0,
+                                                              m_sstrmer->get_strm(), m_sstrmer->get_strm_length())) {
                         LOGE("Send metadata to rtmpserver failed (cont)");
                     }
                     break;
@@ -268,8 +265,9 @@ int RtmpSource::loop()
         } else {
             LOGW("Rtmp zero read, maybe source disconnected");
         }
-    } while (!m_quit && nread > -1 &&
-            RTMP_IsConnected(m_rtmp) && !RTMP_IsTimedout(m_rtmp));
+    } while (!m_quit &&
+             nread > -1 &&
+             RTMP_IsConnected(m_rtmp) && !RTMP_IsTimedout(m_rtmp));
 
     if (nread < 0)
         nread = m_rtmp->m_read.status;

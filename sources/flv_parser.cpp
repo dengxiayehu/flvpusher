@@ -100,7 +100,9 @@ int FLVParser::read_header(FLVHeader &hdr,
     LOGD("Previous Tag Size: %u", prev_tag_size);
 #endif
 
-    m_status[0].file_offset = m_file.cursor();
+    if (!buf) {
+        m_status[0].file_offset = m_file.cursor();
+    }
 
     return hdr.dataoffset + sizeof(uint32_t);
 }
@@ -192,7 +194,9 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
         return -1;
     }
 
-    m_status[0].file_offset = m_file.cursor();
+    if (!buf) {
+        m_status[0].file_offset = m_file.cursor();
+    }
 
     return VALUI24(tag->hdr.datasize) +
         sizeof(FLVTagHeader) + sizeof(uint32_t);

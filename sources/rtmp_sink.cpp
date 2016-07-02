@@ -1,5 +1,3 @@
-#include "rtmp_handler.h"
-
 #include <cstdlib>
 
 #include <librtmp/log.h>
@@ -8,6 +6,7 @@
 #include <xutil.h>
 #include <xmedia.h>
 
+#include "rtmp_sink.h"
 #include "raw_parser.h"
 #include "flv_muxer.h"
 #include "config.h"
@@ -23,32 +22,27 @@ using namespace xmedia;
 
 namespace flvpusher {
 
-RtmpHandler::RtmpHandler(const std::string &flvpath) :
-    m_vparser(new VideoRawParser),
-    m_aparser(new AudioRawParser)
+RtmpSink::RtmpSink(const std::string &flvpath) :
+    MediaSink(flvpath)
 {
     bzero(&m_rt, sizeof(m_rt));
-
-    if (!flvpath.empty()) {
-        if (m_flvmuxer.set_file(flvpath) < 0) {
-            LOGE("flvmuxer's set_file() failed");
-        }
-    }
 }
 
-RtmpHandler::~RtmpHandler()
+RtmpSink::~RtmpSink()
 {
     // If live still exists, disconnect it
     disconnect();
-
-    SAFE_DELETE(m_vparser);
-    SAFE_DELETE(m_aparser);
 
     SAFE_FREE(m_rt.prev_pkt[0]);
     SAFE_FREE(m_rt.prev_pkt[1]);
 }
 
-int RtmpHandler::connect(const std::string &liveurl)
+MediaSink::Type RtmpSink::type() const
+{
+    return RTMP_SINK;
+}
+
+int RtmpSink::connect(const std::string &liveurl)
 {
     RTMPContext *rt = &m_rt;
 
@@ -103,7 +97,7 @@ bail:
     return -1;
 }
 
-int RtmpHandler::disconnect()
+int RtmpSink::disconnect()
 {
     RTMPContext *rt = &m_rt;
     if (rt->rtmp) {
@@ -119,7 +113,7 @@ int RtmpHandler::disconnect()
     return 0;
 }
 
-int RtmpHandler::send_video(int32_t timestamp, byte *dat, uint32_t length)
+int RtmpSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
 {
     if (m_vparser->process(dat, length) < 0) {
         LOGE("Process video failed");
@@ -222,8 +216,7 @@ int RtmpHandler::send_video(int32_t timestamp, byte *dat, uint32_t length)
     return 0;
 }
 
-int RtmpHandler::make_video_body(byte *buf, uint32_t dat_len,
-        bool key_frame)
+int RtmpSink::make_video_body(byte *buf, uint32_t dat_len, bool key_frame)
 {
     uint32_t idx = 0;
 
@@ -237,9 +230,9 @@ int RtmpHandler::make_video_body(byte *buf, uint32_t dat_len,
     return dat_len;
 }
 
-int RtmpHandler::make_avc_dcr_body(byte *buf,
-                                   const byte *sps, uint32_t sps_len,
-                                   const byte *pps, uint32_t pps_len)
+int RtmpSink::make_avc_dcr_body(byte *buf,
+                                const byte *sps, uint32_t sps_len,
+                                const byte *pps, uint32_t pps_len)
 {
     uint32_t idx = 0;
 
@@ -277,7 +270,7 @@ int RtmpHandler::make_avc_dcr_body(byte *buf,
     return idx;
 }
 
-int RtmpHandler::send_audio(int32_t timestamp, byte *dat, uint32_t length)
+int RtmpSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
 {
     if (m_aparser->process(dat, length) < 0) {
         LOGE("Process audio failed");
@@ -352,7 +345,7 @@ int RtmpHandler::send_audio(int32_t timestamp, byte *dat, uint32_t length)
     return 0;
 }
 
-int RtmpHandler::make_asc_body(const byte asc[2], byte buf[], uint32_t len)
+int RtmpSink::make_asc_body(const byte asc[2], byte buf[], uint32_t len)
 {
     buf[0] = 0xAF;
     buf[1] = 0x00;
@@ -361,8 +354,8 @@ int RtmpHandler::make_asc_body(const byte asc[2], byte buf[], uint32_t len)
 }
 
 // Note: dat is ADTS header removed
-int RtmpHandler::make_audio_body(const byte *dat, uint32_t dat_len,
-                                 byte buf[], uint32_t len)
+int RtmpSink::make_audio_body(const byte *dat, uint32_t dat_len,
+                              byte buf[], uint32_t len)
 {
     buf[0] = 0xAF;
     buf[1] = 0x01;
@@ -370,7 +363,7 @@ int RtmpHandler::make_audio_body(const byte *dat, uint32_t dat_len,
     return dat_len + 2;
 }
 
-byte RtmpHandler::pkttyp2channel(byte typ)
+byte RtmpSink::pkttyp2channel(byte typ)
 {
     if (typ == RTMP_PACKET_TYPE_VIDEO) {
         return RTMP_VIDEO_CHANNEL;
@@ -381,8 +374,8 @@ byte RtmpHandler::pkttyp2channel(byte typ)
     }
 }
 
-bool RtmpHandler::send_rtmp_pkt(int pkttype, uint32_t ts,
-                                const byte *buf, uint32_t pktsize)
+bool RtmpSink::send_rtmp_pkt(int pkttype, uint32_t ts,
+                             const byte *buf, uint32_t pktsize)
 {
     if (m_flvmuxer.is_opened()) {
         if (m_flvmuxer.write_tag(pkttype, ts, buf, pktsize) < 0) {
@@ -435,8 +428,8 @@ bool RtmpHandler::send_rtmp_pkt(int pkttype, uint32_t ts,
 #endif
 }
 
-int RtmpHandler::rtmp_check_alloc_array(RTMPPacket **prev_pkt, int *nb_prev_pkt,
-                                        int channel)
+int RtmpSink::rtmp_check_alloc_array(RTMPPacket **prev_pkt, int *nb_prev_pkt,
+                                     int channel)
 {
     int nb_alloc;
     RTMPPacket *ptr;
@@ -455,8 +448,8 @@ int RtmpHandler::rtmp_check_alloc_array(RTMPPacket **prev_pkt, int *nb_prev_pkt,
     return 0;
 }
 
-int RtmpHandler::rtmp_packet_create(RTMPPacket *pkt, int channel_id, int type,
-                                    int timestamp, int size)
+int RtmpSink::rtmp_packet_create(RTMPPacket *pkt, int channel_id, int type,
+                                 int timestamp, int size)
 {
     if (size) {
         pkt->data = (uint8_t *) malloc(size);
@@ -474,7 +467,7 @@ int RtmpHandler::rtmp_packet_create(RTMPPacket *pkt, int channel_id, int type,
     return 0;
 }
 
-int RtmpHandler::rtmp_send_packet(RTMPContext *rt, RTMPPacket *pkt, int track)
+int RtmpSink::rtmp_send_packet(RTMPContext *rt, RTMPPacket *pkt, int track)
 {
     int ret;
 
@@ -484,7 +477,7 @@ int RtmpHandler::rtmp_send_packet(RTMPContext *rt, RTMPPacket *pkt, int track)
     return ret;
 }
 
-void RtmpHandler::rtmp_packet_destroy(RTMPPacket *pkt)
+void RtmpSink::rtmp_packet_destroy(RTMPPacket *pkt)
 {
     if (!pkt)
         return;
@@ -492,8 +485,8 @@ void RtmpHandler::rtmp_packet_destroy(RTMPPacket *pkt)
     pkt->size = 0;
 }
 
-int RtmpHandler::rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_size,
-                                   RTMPPacket **prev_pkt_ptr, int *nb_prev_pkt)
+int RtmpSink::rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_size,
+                                RTMPPacket **prev_pkt_ptr, int *nb_prev_pkt)
 {
     uint8_t pkt_hdr[16], *p = pkt_hdr;
     int mode = RTMP_PS_TWELVEBYTES;
@@ -583,7 +576,7 @@ int RtmpHandler::rtmp_packet_write(RTMPContext *rt, RTMPPacket *pkt, int chunk_s
     return written;
 }
 
-int RtmpHandler::send_to_network(RTMPContext *rt, const uint8_t *buf, int size)
+int RtmpSink::send_to_network(RTMPContext *rt, const uint8_t *buf, int size)
 {
     int ret;
 

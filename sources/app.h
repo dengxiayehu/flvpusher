@@ -10,8 +10,8 @@ using xutil::status_t;
 
 namespace flvpusher {
 
+class MediaSink;
 class MediaPusher;
-class RtmpHandler;
 class HLSSegmenter;
 
 class App {
@@ -63,11 +63,10 @@ private:
     int m_hls_time;
     int m_hls_list_size;
     bool m_loop;
-    std::string m_req_tspath;
     std::string m_tspath;
     std::string m_flvpath;
 
-    RtmpHandler *m_rtmp_hdl;
+    MediaSink *m_sink;
     MediaPusher *m_pusher;
     HLSSegmenter*m_hls;
 

@@ -4,15 +4,15 @@
 #include <xlog.h>
 
 #include "mp4_parser.h"
-#include "rtmp_handler.h"
+#include "media_sink.h"
+#include "rtmp_sink.h"
 
 using namespace amf;
 
 namespace flvpusher {
 
-MP4Pusher1::MP4Pusher1(const std::string &input,
-        RtmpHandler *&rtmp_hdl) :
-    MediaPusher(input, rtmp_hdl),
+MP4Pusher1::MP4Pusher1(const std::string &input, MediaSink *&sink) :
+    MediaPusher(input, sink),
     m_parser(NULL),
     m_prev_ts(-1), m_tm_start(UINT64_MAX),
     m_width(0), m_height(0)
@@ -87,14 +87,14 @@ int MP4Pusher1::parsed_frame_cb(void *opaque, Frame *f, int is_video)
     }
 
     if (is_video) {
-        if (obj->m_rtmp_hdl->send_video(f->m_ts,
-                    f->m_dat, f->m_dat_len) < 0) {
+        if (obj->m_sink->send_video(f->m_ts,
+                                    f->m_dat, f->m_dat_len) < 0) {
             LOGE("Send video data to rtmpserver failed");
             ret = -1;
         }
     } else {
-        if (obj->m_rtmp_hdl->send_audio(f->m_ts,
-                    f->m_dat, f->m_dat_len) < 0) {
+        if (obj->m_sink->send_audio(f->m_ts,
+                                    f->m_dat, f->m_dat_len) < 0) {
             LOGE("Send audio data to rtmpserver failed");
             ret = -1;
         }
@@ -113,8 +113,8 @@ int MP4Pusher1::send_metadata()
     put_amf_string_no_typ(p, "height");
     put_amf_number(p, m_height);
     put_amf_obj_end(p);
-    return m_rtmp_hdl->send_rtmp_pkt(RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
-                                     buff, p - buff);
+    return ((RtmpSink *) m_sink)->send_rtmp_pkt(RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
+                                                buff, p - buff);
 }
 
 }

@@ -7,13 +7,11 @@
 
 namespace flvpusher {
 
-class RtmpHandler;
 class MP4Parser;
 
 class MP4Pusher : public MediaPusher {
 public:
-    MP4Pusher(const std::string &input,
-            RtmpHandler *&rtmp_hdl);
+    MP4Pusher(const std::string &input, MediaSink *&sink);
     virtual ~MP4Pusher();
 
     int loop();

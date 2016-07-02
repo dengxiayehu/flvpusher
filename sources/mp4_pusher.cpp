@@ -1,6 +1,7 @@
 #include "mp4_pusher.h"
 #include "mp4_parser.h"
-#include "rtmp_handler.h"
+#include "media_sink.h"
+#include "rtmp_sink.h"
 
 #include <xlog.h>
 #include <amf.h>
@@ -9,9 +10,8 @@ using namespace amf;
 
 namespace flvpusher {
 
-MP4Pusher::MP4Pusher(const std::string &input,
-        RtmpHandler *&rtmp_hdl) :
-    MediaPusher(input, rtmp_hdl),
+MP4Pusher::MP4Pusher(const std::string &input, MediaSink *&sink) :
+    MediaPusher(input, sink),
     m_vthrd(NULL), m_athrd(NULL),
     m_parser(NULL),
     m_tm_start(0),
@@ -53,7 +53,8 @@ int MP4Pusher::loop()
     LOGI("Pushing file \"%s\" ..", STR(m_input));
 
     // Send metadata pkt to rtmpserver
-    if (!send_metadata()) {
+    if (m_sink->type() == MediaSink::RTMP_SINK &&
+        !send_metadata()) {
         LOGE("Send metadata to rtmpserver failed (cont)");
     }
 
@@ -78,10 +79,8 @@ int MP4Pusher::send_metadata()
     put_amf_string_no_typ(p, "height");
     put_amf_number(p, vtrak->avc1->height);
     put_amf_obj_end(p);
-    return m_rtmp_hdl->send_rtmp_pkt(
-            RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
-            buff,
-            p - buff);
+    return ((RtmpSink *) m_sink)->send_rtmp_pkt(RTMP_PACKET_TYPE_INFO, 0 /* metadata's timestamp is always 0*/,
+                                                buff, p - buff);
 }
 
 void *MP4Pusher::vsnd_func(void *arg)
@@ -112,8 +111,7 @@ void *MP4Pusher::vsnd_func(void *arg)
 
         {
             AutoLock _l(m_mutex);
-            if (m_rtmp_hdl->send_video(frame.m_ts,
-                        frame.m_dat, frame.m_dat_len) < 0) {
+            if (m_sink->send_video(frame.m_ts, frame.m_dat, frame.m_dat_len) < 0) {
                 m_quit = true;
                 m_retval = -1;
                 break;
@@ -153,8 +151,7 @@ void *MP4Pusher::asnd_func(void *arg)
 
         {
             AutoLock _l(m_mutex);
-            if (m_rtmp_hdl->send_audio(frame.m_ts,
-                        frame.m_dat, frame.m_dat_len) < 0) {
+            if (m_sink->send_audio(frame.m_ts, frame.m_dat, frame.m_dat_len) < 0) {
                 m_quit = true;
                 m_retval = -1;
                 break;

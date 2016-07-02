@@ -10,11 +10,11 @@
 
 namespace flvpusher {
 
-class RtmpHandler;
+class MediaSink;
 
 class MediaPusher {
 public:
-    MediaPusher(const std::string &input, RtmpHandler *&rtmp_hdl);
+    MediaPusher(const std::string &input, MediaSink *&sink);
     virtual ~MediaPusher();
 
     virtual void ask2quit() { m_quit = true; }
@@ -32,7 +32,7 @@ protected:
 
 protected:
     std::string m_input;
-    RtmpHandler *m_rtmp_hdl;
+    MediaSink *m_sink;
     volatile bool m_quit;
 
     xfile::File m_dvf;

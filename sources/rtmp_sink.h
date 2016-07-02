@@ -1,27 +1,24 @@
-#ifndef _RTMP_HANDLER_H_
-#define _RTMP_HANDLER_H_
+#ifndef _RTMP_SINK_H_
+#define _RTMP_SINK_H_
 
-#include <string>
 #include <librtmp/rtmp.h>
-#include <xutil.h>
 
-#include "flv_muxer.h"
+#include "media_sink.h"
 
 namespace flvpusher {
 
-class VideoRawParser;
-class AudioRawParser;
-
-class RtmpHandler {
+class RtmpSink : public MediaSink {
 public:
-    RtmpHandler(const std::string &flvpath);
-    ~RtmpHandler();
+    RtmpSink(const std::string &flvpath);
+    virtual ~RtmpSink();
 
-    int connect(const std::string &liveurl);
-    int disconnect();
+    virtual Type type() const;
 
-    int send_video(int32_t timestamp, byte *dat, uint32_t length);
-    int send_audio(int32_t timestamp, byte *dat, uint32_t length);
+    virtual int connect(const std::string &liveurl);
+    virtual int disconnect();
+
+    virtual int send_video(int32_t timestamp, byte *dat, uint32_t length);
+    virtual int send_audio(int32_t timestamp, byte *dat, uint32_t length);
 
     bool send_rtmp_pkt(int pkttype, uint32_t ts,
                        const byte *buf, uint32_t pktsize);
@@ -69,10 +66,9 @@ private:
                                byte buf[], uint32_t len);
 
     static int make_avc_dcr_body(byte *buf,
-            const byte *sps, uint32_t sps_len,
-            const byte *pps, uint32_t pps_len);
-    static int make_video_body(byte *buf, uint32_t dat_len,
-            bool key_frame);
+                                 const byte *sps, uint32_t sps_len,
+                                 const byte *pps, uint32_t pps_len);
+    static int make_video_body(byte *buf, uint32_t dat_len, bool key_frame);
 
     static byte pkttyp2channel(byte typ);
 
@@ -88,11 +84,6 @@ private:
 
 private:
     RTMPContext m_rt;
-    std::string m_url;
-
-    VideoRawParser *m_vparser;
-    AudioRawParser *m_aparser;
-    FLVMuxer m_flvmuxer;
 
     DataInfo m_vinfo;
     DataInfo m_ainfo;
@@ -102,4 +93,4 @@ private:
 
 }
 
-#endif /* end of _RTMP_HANDLER_H_ */
+#endif /* end of _RTMP_SINK_H_ */

@@ -20,8 +20,8 @@
 #include "rtsp_source.h"
 #include "web_server.h"
 #include "hls_segmenter.h"
-#include "rtmp_handler.h"
 #include "rtsp_sink.h"
+#include "rtmp_sink.h"
 
 using namespace xutil;
 using namespace xconfig;
@@ -40,7 +40,7 @@ App::App() :
     m_webserver(false),
     m_hls_time(5),
     m_loop(false),
-    m_rtmp_hdl(NULL),
+    m_sink(NULL),
     m_pusher(NULL),
     m_hls(NULL),
     m_quit(false),
@@ -78,8 +78,8 @@ int App::init()
 void App::cleanup()
 {
     SAFE_DELETE(m_pusher);
-    SAFE_DELETE(m_rtmp_hdl);
     SAFE_DELETE(m_hls);
+    SAFE_DELETE(m_sink);
     SAFE_DELETE(m_sig_hdl);
 
     if (m_conf) {
@@ -130,7 +130,6 @@ int App::parse_arg(int argc, char *argv[])
         {"dafile",          required_argument, NULL, 'a'},
         {"hls_playlist",    required_argument, NULL, 'S'},
         {"hls_time",        required_argument, NULL, 't'},
-        {"hls_client",      required_argument, NULL, 'c'},
         {"loop",            no_argument,       NULL, 'T'},
         {"tspath",          required_argument, NULL, 's'},
         {"flvpath",         required_argument, NULL, 'f'},
@@ -141,7 +140,7 @@ int App::parse_arg(int argc, char *argv[])
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:c:Nf:wW;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:Nf:wW;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -183,10 +182,6 @@ int App::parse_arg(int argc, char *argv[])
 
         case 'f':
             m_flvpath = optarg;
-            break;
-
-        case 'c':
-            m_req_tspath = optarg;
             break;
 
         case 'N':
@@ -235,40 +230,41 @@ int App::check_arg() const
         return 0;
     }
 
-    if (m_req_tspath.empty()) {
-        if (m_input_str.empty()) {
-            LOGE("No input url specified");
-            return -1;
-        }
-
-        if ((m_liveurl.empty() && m_hls_playlist.empty()) ||
-            (!m_liveurl.empty() && !m_hls_playlist.empty())) {
-            LOGE("'--hls_playlist' and '-L' can't be both set or empty");
-            return -1;
-        }
-
-        if (!m_hls_playlist.empty()) {
-            if (m_hls_time < 0) {
-                LOGE("Invalid value of hls_time(%d)", m_hls_time);
-                return -1;
-            }
-        }
+    if (m_input_str.empty()) {
+        LOGE("No input url specified");
+        return -1;
     }
 
+    if ((m_liveurl.empty() && m_hls_playlist.empty()) ||
+        (!m_liveurl.empty() && !m_hls_playlist.empty())) {
+        LOGE("'--hls_playlist' and '-L' can't be both set or empty");
+        return -1;
+    }
+
+    if (!m_hls_playlist.empty()) {
+        if (m_hls_time < 0) {
+            LOGE("Invalid value of hls_time(%d)", m_hls_time);
+            return -1;
+        }
+    }
     return 0;
 }
 
 void App::usage() const
 {
-    fprintf(stderr, "Usage: flvpusher <-i media_file|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]|[-c request-tspath]> [-h] [--no_logfile]\n");
+    fprintf(stderr, "Usage: flvpusher <-i media_file|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]> [-h] [--no_logfile]\n");
     fprintf(stderr, "Version: %d\n", VERSION);
 }
 
 int App::prepare()
 {
     if (!m_liveurl.empty()) {
-        m_rtmp_hdl = new RtmpHandler(m_flvpath);
-        if (m_rtmp_hdl->connect(m_liveurl) < 0)
+        if (start_with(m_liveurl, "rtmp")) {
+            m_sink = new RtmpSink(m_flvpath);
+        } else if (start_with(m_liveurl, "rtsp")) {
+            m_sink = new RtspSink(m_flvpath);
+        }
+        if (m_sink->connect(m_liveurl) < 0)
             return -1;
     }
     return 0;
@@ -343,24 +339,24 @@ int App::main(int argc, char *argv[])
             if (m_quit) break;
 
             if (start_with(*it, "rtmp://")) {
-                m_pusher = new RtmpSource(*it, m_rtmp_hdl);
+                m_pusher = new RtmpSource(*it, m_sink);
             } else if (start_with(*it, "rtsp://")) {
-                m_pusher = new RtspSource(*it, m_rtmp_hdl);
+                m_pusher = new RtspSource(*it, m_sink);
             } else if (end_with(*it, ".flv")) {
-                m_pusher = new FLVPusher(*it, m_rtmp_hdl);
+                m_pusher = new FLVPusher(*it, m_sink);
             } else if (end_with(*it, ".mp4") || end_with(*it, ".3gp")) {
 #if defined (VERSION) && (VERSION > 1)
-                m_pusher = new MP4Pusher1(*it, m_rtmp_hdl);
+                m_pusher = new MP4Pusher1(*it, m_sink);
 #else
-                m_pusher = new MP4Pusher(*it, m_rtmp_hdl);
+                m_pusher = new MP4Pusher(*it, m_sink);
 #endif
             } else if (end_with(*it, ".ts")) {
-                m_pusher = new TSPusher(*it, m_rtmp_hdl);
+                m_pusher = new TSPusher(*it, m_sink);
             } else if (start_with(*it, "http://")) {
                 std::auto_ptr<Uri> uri_parser(new Uri);
                 uri_parser->parse(STR(*it));
                 if (end_with(uri_parser->path, ".m3u8")) {
-                    m_pusher = new HLSPusher(*it, m_rtmp_hdl, m_conf);
+                    m_pusher = new HLSPusher(*it, m_sink, m_conf);
                 }
             }
 

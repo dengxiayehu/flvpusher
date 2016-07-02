@@ -5,13 +5,11 @@
 
 namespace flvpusher {
 
-class RtmpHandler;
 class TagStreamerBase;
 
 class FLVPusher : public MediaPusher {
 public:
-    FLVPusher(const std::string &input,
-            RtmpHandler *&rtmp_hdl);
+    FLVPusher(const std::string &input, MediaSink *&sink);
     virtual ~FLVPusher();
 
     int loop();

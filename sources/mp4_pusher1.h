@@ -11,8 +11,7 @@ class MP4Parser;
 
 class MP4Pusher1 : public MediaPusher {
 public:
-    MP4Pusher1(const std::string &input,
-            RtmpHandler *&rtmp_hdl);
+    MP4Pusher1(const std::string &input, MediaSink *&sink);
     virtual ~MP4Pusher1();
 
     virtual int loop();

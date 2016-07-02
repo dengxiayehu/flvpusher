@@ -8,6 +8,7 @@
 #include "hls_common.h"
 #include "hls_pusher.h"
 #include "ts_pusher.h"
+#include "media_sink.h"
 
 using namespace xconfig;
 using namespace xcurl;
@@ -504,8 +505,8 @@ HLSPusher::hls_stream *HLSPusher::stream_sys::find_hls(hls_stream *hls_new)
     return NULL;
 }
 
-HLSPusher::HLSPusher(const string &input, RtmpHandler *&rtmp_hdl, Config *conf) :
-    MediaPusher(input, rtmp_hdl),
+HLSPusher::HLSPusher(const string &input, MediaSink *&sink, Config *conf) :
+    MediaPusher(input, sink),
     m_conf(conf), m_sys(NULL), m_ts_pusher(NULL)
 {
 }
@@ -658,7 +659,7 @@ int HLSPusher::live_segment(segment *seg)
                         GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "wb");
 
     int ret = 0;
-    m_ts_pusher = new TSPusher(tempts, m_rtmp_hdl, true);
+    m_ts_pusher = new TSPusher(tempts, m_sink, true);
     m_ts_pusher->dump_video(m_dvf.get_path(), true);
     m_ts_pusher->dump_audio(m_daf.get_path(), true);
     if (m_ts_pusher->loop() < 0) {

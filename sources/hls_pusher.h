@@ -7,12 +7,11 @@
 
 namespace flvpusher {
 
-class RtmpHandler;
 class TSPusher;
 
 class HLSPusher : public MediaPusher {
 public:
-    HLSPusher(const std::string &input, RtmpHandler *&rtmp_hdl, xconfig::Config *conf);
+    HLSPusher(const std::string &input, MediaSink *&sink, xconfig::Config *conf);
     virtual ~HLSPusher();
 
     virtual int loop();

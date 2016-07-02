@@ -1,14 +1,13 @@
 #include "media_pusher.h"
-#include "rtmp_handler.h"
+#include "media_sink.h"
 
 using namespace xmedia;
 
 namespace flvpusher {
 
-MediaPusher::MediaPusher(const std::string &input,
-    RtmpHandler *&rtmp_hdl) :
+MediaPusher::MediaPusher(const std::string &input, MediaSink *&sink) :
     m_input(input),
-    m_rtmp_hdl(rtmp_hdl),
+    m_sink(sink),
     m_quit(false),
     m_itime_base((AVRational) {1001, 24000})
 {
