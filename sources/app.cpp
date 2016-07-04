@@ -93,10 +93,9 @@ void App::ask2quit()
 {
     m_quit = true;
 
-    if (m_pusher)
-        m_pusher->ask2quit();
-    if (m_hls)
-        m_hls->ask2quit();
+    if (m_pusher) m_pusher->ask2quit();
+    if (m_sink) m_sink->ask2quit();
+    if (m_hls) m_hls->ask2quit();
 }
 
 int App::load_cfg(std::string cfg_file)

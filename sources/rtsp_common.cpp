@@ -1408,18 +1408,20 @@ int RtspClient::request_describe(std::string &sdp, TaskFunc *proc)
     return 0;
 }
 
-int RtspClient::send_request(const char *cmd_url, const std::string &request)
+int RtspClient::send_request(const char *cmd_url, const std::string &request, const std::string &content)
 {
     ++m_cseq;
     string str(sprintf_("%s %s RTSP/1.0"CRLF
                               "CSeq: %d"CRLF
                               "User-Agent: %s"CRLF
                               "%s"
-                              CRLF,
+                              CRLF
+                              "%s",
             STR(request), cmd_url,
             m_cseq,
             STR(m_user_agent_str),
-            STR(field2string())));
+            STR(field2string()),
+            STR(content)));
 #ifdef XDEBUG
     LOGD("Sent rtsp request:[%s]", STR(str));
 #endif
@@ -1741,6 +1743,24 @@ int RtspClient::request_get_parameter(TaskFunc *proc)
     }
 
     if (proc) proc(this);
+    return 0;
+}
+
+int RtspClient::request_announce(const std::string &sdp)
+{
+    if (m_stat < StateConnected)
+        return -1;
+
+    add_field("Content-Type: application/sdp");
+    add_field(sprintf_("Content-Length: %d", sdp.length()));
+    string cmd_url(generate_cmd_url(m_base_url, NULL));
+
+    if (send_request(STR(cmd_url), "ANNOUNCE", sdp) > 0) {
+        ResponseInfo ri;
+        if (!recv_response(&ri)) {
+            m_stat = StateInit;
+        }
+    }
     return 0;
 }
 
@@ -2961,118 +2981,7 @@ void MediaSubsession::close()
                 m_rtcp_socket->get_sockfd());
 }
 
-RtpSink::RtpSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
-                 const char *rtp_payload_format_name, unsigned num_channels) :
-    m_udp(udp),
-    m_rtp_payload_type(rtp_payload_type),
-    m_rtp_timestamp_frequency(rtp_timestamp_frequency),
-    m_next_timestamp_has_been_preset(false),
-    m_rtp_payload_format_name(strdup_(rtp_payload_format_name)),
-    m_num_channels(num_channels)
-{
-    m_seq_num = rand();
-    m_ssrc = random32();
-    m_timestamp_base = random32();
-    gettimeofday(&m_creation_time, NULL);
-}
-
-RtpSink::~RtpSink()
-{
-    free((char *) m_rtp_payload_format_name);
-}
-
-uint32_t RtpSink::random32()
-{
-    int r_1 = rand();
-    uint32_t r16_1 = (uint32_t) (r_1&0x00FFFF00);
-
-    int r_2 = rand();
-    uint32_t r16_2 = (uint32_t) (r_2&0x00FFFF00);
-
-    return (r16_1<<8) | (r16_2>>8);
-}
-
-char const *RtpSink::sdp_media_type() const
-{
-    return "data";
-}
-
-char *RtpSink::rtpmap_line() const
-{
-    if (rtp_payload_type() >= 96) {
-        string encoding_params_part;
-        if (num_channels() != 1) {
-            encoding_params_part = sprintf_("/%d", num_channels());
-        } else {
-            encoding_params_part = "";
-        }
-        char const * const rtpmap_fmt = "a=rtpmap:%d %s/%d%s"CRLF;
-        unsigned rtpmap_fmt_size = strlen(rtpmap_fmt)
-            + 3  + strlen(rtp_payload_format_name())
-            + 20 + encoding_params_part.length();
-        char *rtpmap_line = (char *) malloc(rtpmap_fmt_size);
-        sprintf(rtpmap_line, rtpmap_fmt,
-                rtp_payload_type(), rtp_payload_format_name(),
-                rtp_timestamp_frequency(), STR(encoding_params_part));
-        return rtpmap_line;
-    } else {
-        return strdup_("");
-    }
-}
-
-char const *RtpSink::aux_sdp_line()
-{
-    return NULL;
-}
-
-uint32_t RtpSink::convert_to_rtp_timestamp(struct timeval tv)
-{
-    uint32_t timestamp_increment = m_rtp_timestamp_frequency*tv.tv_sec;
-    timestamp_increment += (uint32_t) (m_rtp_timestamp_frequency*(tv.tv_usec/1000000.0) + 0.5);
-
-    if (m_next_timestamp_has_been_preset) {
-        m_timestamp_base -= timestamp_increment;
-        m_next_timestamp_has_been_preset = false;
-    }
-
-    uint32_t const rtp_timestamp = m_timestamp_base + timestamp_increment;
-
-#ifdef XDEBUG
-    LOGD("m_timestamp_base: 0x%08x, tv: %lu.%06ld\n\t=> RTP timestamp: 0x%08x",
-         m_timestamp_base, tv.tv_sec, tv.tv_usec, rtp_timestamp);
-#endif
-
-    return rtp_timestamp;
-}
-
-uint32_t RtpSink::preset_next_timestamp()
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-
-    uint32_t ts_now = convert_to_rtp_timestamp(tv);
-    m_timestamp_base = ts_now;
-    m_next_timestamp_has_been_preset = true;
-
-    return ts_now;
-}
-
-MultiFramedRTPSink::MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type,
-                                         unsigned rtp_timestamp_frequency,
-                                         const char *rtp_payload_format_name,
-                                         unsigned num_channels) :
-    RtpSink(udp, rtp_payload_type, rtp_timestamp_frequency,
-            rtp_payload_format_name, num_channels)
-{
-}
-
-MultiFramedRTPSink::~MultiFramedRTPSink()
-{
-}
-
-void MultiFramedRTPSink::set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size)
-{
-}
+/////////////////////////////////////////////////////////////
 
 unsigned OutPacketBuffer::max_size = 60000;
 
@@ -3197,6 +3106,401 @@ void OutPacketBuffer::reset_packet_start()
         m_overflow_data_offset += m_packet_start;
     }
     m_packet_start = 0;
+}
+
+/////////////////////////////////////////////////////////////
+
+uint32_t random32()
+{
+    int r_1 = rand();
+    uint32_t r16_1 = (uint32_t) (r_1&0x00FFFF00);
+
+    int r_2 = rand();
+    uint32_t r16_2 = (uint32_t) (r_2&0x00FFFF00);
+
+    return (r16_1<<8) | (r16_2>>8);
+}
+
+MultiFramedRTPSink::MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
+                                       const char *rtp_payload_format_name, unsigned num_channels) :
+    m_queue_src(NULL),
+    m_udp(udp),
+    m_rtp_payload_type(rtp_payload_type),
+    m_rtp_timestamp_frequency(rtp_timestamp_frequency),
+    m_next_timestamp_has_been_preset(false),
+    m_rtp_payload_format_name(strdup_(rtp_payload_format_name)),
+    m_num_channels(num_channels),
+    m_out_buf(NULL), m_cur_fragmentation_offset(0), m_previous_frame_ended_fragmentation(false),
+    m_on_send_error_func(NULL), m_on_send_error_data(NULL)
+{
+    m_seq_num = rand();
+    m_ssrc = random32();
+    m_timestamp_base = random32();
+    gettimeofday(&m_creation_time, NULL);
+}
+
+MultiFramedRTPSink::~MultiFramedRTPSink()
+{
+    SAFE_DELETE(m_out_buf);
+    free((char *) m_rtp_payload_format_name);
+}
+
+void MultiFramedRTPSink::set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size)
+{
+    if (preferred_packet_size > max_packet_size ||
+        preferred_packet_size == 0) {
+        LOGW("preferred_packet_size=%u, max_packet_size=%u (ignored)",
+             preferred_packet_size, max_packet_size);
+        return;
+    }
+
+    SAFE_DELETE(m_out_buf);
+    m_out_buf = new OutPacketBuffer(preferred_packet_size, max_packet_size);
+    m_our_max_packet_size = max_packet_size;
+}
+
+bool MultiFramedRTPSink::start_playing(Queue<Frame *> &queue_src, after_playing_func *after_func,
+                                       void *after_client_data)
+{
+    if (m_queue_src) {
+        LOGE("This sink is already beging played");
+        return false;
+    }
+
+    m_queue_src = (Queue<Frame *> *) &queue_src;
+
+    m_after_func = after_func;
+    m_after_client_data = after_client_data;
+    return continue_playing();
+}
+
+void MultiFramedRTPSink::stop_playing()
+{
+    m_queue_src = NULL;
+    m_after_func = NULL;
+}
+
+void MultiFramedRTPSink::on_source_closure(void *client_data)
+{
+    MultiFramedRTPSink *sink = (MultiFramedRTPSink *) client_data;
+    sink->on_source_closure();
+}
+
+void MultiFramedRTPSink::on_source_closure()
+{
+    m_queue_src = NULL;
+    if (m_after_func) {
+        (*m_after_func)(m_after_client_data);
+    }
+}
+
+char const *MultiFramedRTPSink::sdp_media_type() const
+{
+    return "data";
+}
+
+char *MultiFramedRTPSink::rtpmap_line() const
+{
+    if (rtp_payload_type() >= 96) {
+        string encoding_params_part;
+        if (num_channels() != 1) {
+            encoding_params_part = sprintf_("/%d", num_channels());
+        } else {
+            encoding_params_part = "";
+        }
+        char const * const rtpmap_fmt = "a=rtpmap:%d %s/%d%s"CRLF;
+        unsigned rtpmap_fmt_size = strlen(rtpmap_fmt)
+            + 3  + strlen(rtp_payload_format_name())
+            + 20 + encoding_params_part.length();
+        char *rtpmap_line = (char *) malloc(rtpmap_fmt_size);
+        snprintf(rtpmap_line, rtpmap_fmt_size, rtpmap_fmt,
+                rtp_payload_type(), rtp_payload_format_name(),
+                rtp_timestamp_frequency(), STR(encoding_params_part));
+        return rtpmap_line;
+    } else {
+        return strdup_("");
+    }
+}
+
+char const *MultiFramedRTPSink::aux_sdp_line()
+{
+    return NULL;
+}
+
+bool MultiFramedRTPSink::continue_playing()
+{
+    build_and_send_packet(true);
+    return true;
+}
+
+uint32_t MultiFramedRTPSink::convert_to_rtp_timestamp(struct timeval tv)
+{
+    uint32_t timestamp_increment = m_rtp_timestamp_frequency*tv.tv_sec;
+    timestamp_increment += (uint32_t) (m_rtp_timestamp_frequency*(tv.tv_usec/1000000.0) + 0.5);
+
+    if (m_next_timestamp_has_been_preset) {
+        m_timestamp_base -= timestamp_increment;
+        m_next_timestamp_has_been_preset = false;
+    }
+
+    uint32_t const rtp_timestamp = m_timestamp_base + timestamp_increment;
+
+#ifdef XDEBUG
+    LOGD("m_timestamp_base: 0x%08x, tv: %lu.%06ld\n\t=> RTP timestamp: 0x%08x",
+         m_timestamp_base, tv.tv_sec, tv.tv_usec, rtp_timestamp);
+#endif
+
+    return rtp_timestamp;
+}
+
+uint32_t MultiFramedRTPSink::preset_next_timestamp()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+
+    uint32_t ts_now = convert_to_rtp_timestamp(tv);
+    m_timestamp_base = ts_now;
+    m_next_timestamp_has_been_preset = true;
+
+    return ts_now;
+}
+
+void MultiFramedRTPSink::build_and_send_packet(bool is_first_packet)
+{
+    m_is_first_packet = is_first_packet;
+
+    unsigned rtp_hdr = 0x80000000;
+    rtp_hdr |= (m_rtp_payload_type << 16);
+    rtp_hdr |= m_seq_num;
+    m_out_buf->enqueue_word(rtp_hdr);
+
+    m_timestamp_position = m_out_buf->cur_packet_size();
+    m_out_buf->skip_bytes(4);
+
+    m_out_buf->enqueue_word(ssrc());
+
+    m_special_header_position = m_out_buf->cur_packet_size();
+    m_special_header_size = special_header_size();
+    m_out_buf->skip_bytes(m_special_header_size);
+
+    m_total_frame_specific_header_sizes = 0;
+    m_no_frames_left = false;
+    m_num_frames_used_so_far = 0;
+    pack_frame();
+}
+
+void MultiFramedRTPSink::do_special_frame_handling(unsigned fragmentation_offset,
+                                                   unsigned char *frame_start,
+                                                   unsigned num_bytes_in_frame,
+                                                   struct timeval frame_presentation_time,
+                                                   unsigned num_remaining_bytes)
+{
+    if (is_first_frame_in_packet()) {
+        set_timestamp(frame_presentation_time);
+    }
+}
+
+bool MultiFramedRTPSink::allow_fragmentation_after_start() const
+{
+    return false;
+}
+
+bool MultiFramedRTPSink::allow_other_frames_after_last_fragment() const
+{
+    return false;
+}
+
+bool MultiFramedRTPSink::frame_can_appear_after_packet_start(unsigned char const *frame_start,
+                                                             unsigned num_bytes_in_frame) const
+{
+    return true;
+}
+
+unsigned MultiFramedRTPSink::special_header_size() const
+{
+    return 0;
+}
+
+unsigned MultiFramedRTPSink::frame_special_header_size() const
+{
+    return 0;
+}
+
+unsigned MultiFramedRTPSink::compute_overflow_for_new_frame(unsigned new_frame_size) const
+{
+    return m_out_buf->num_overflow_bytes(new_frame_size);
+}
+
+void MultiFramedRTPSink::set_marker_bit()
+{
+    unsigned rtp_hdr = m_out_buf->extract_word(0);
+    rtp_hdr |= 0x00800000;
+    m_out_buf->insert_word(rtp_hdr, 0);
+}
+
+void MultiFramedRTPSink::set_timestamp(struct timeval frame_presentation_time)
+{
+    m_current_timestamp = convert_to_rtp_timestamp(frame_presentation_time);
+
+    m_out_buf->insert_word(m_current_timestamp, m_timestamp_position);
+}
+
+void MultiFramedRTPSink::set_special_header_word(unsigned word, unsigned word_position)
+{
+    m_out_buf->insert_word(word, m_special_header_position + 4*word_position);
+}
+
+void MultiFramedRTPSink::set_special_header_bytes(unsigned char const *bytes, unsigned num_bytes,
+                                                  unsigned byte_position)
+{
+    m_out_buf->insert(bytes, num_bytes, m_special_header_position + byte_position);
+}
+
+void MultiFramedRTPSink::set_frame_specific_header_word(unsigned word, unsigned word_position)
+{
+    m_out_buf->insert_word(word, m_cur_frame_specific_header_position + 4*word_position);
+}
+
+void MultiFramedRTPSink::set_frame_specific_header_bytes(unsigned char const *bytes, unsigned num_bytes,
+                                                         unsigned byte_position)
+{
+    m_out_buf->insert(bytes, num_bytes, m_cur_frame_specific_header_position + byte_position);
+}
+
+void MultiFramedRTPSink::set_frame_padding(unsigned num_padding_bytes)
+{
+    if (num_padding_bytes > 0) {
+        unsigned char padding_buffer[255];
+        memset(padding_buffer, 0, num_padding_bytes);
+        padding_buffer[num_padding_bytes-1] = num_padding_bytes;
+        m_out_buf->enqueue(padding_buffer, num_padding_bytes);
+
+        unsigned rtp_hdr = m_out_buf->extract_word(0);
+        rtp_hdr |= 0x20000000;
+        m_out_buf->insert_word(rtp_hdr, 0);
+    }
+}
+
+void MultiFramedRTPSink::pack_frame()
+{
+}
+
+void MultiFramedRTPSink::send_packet_if_necessary()
+{
+}
+
+void MultiFramedRTPSink::send_next(void *first_arg)
+{
+    MultiFramedRTPSink *sink = (MultiFramedRTPSink *) first_arg;
+    sink->build_and_send_packet(false);
+}
+
+/////////////////////////////////////////////////////////////
+
+H264Fragmenter::H264Fragmenter(unsigned input_buffer_max, unsigned max_output_packet_size) :
+    m_input_buffer_size(input_buffer_max + 1), m_max_output_packet_size(max_output_packet_size),
+    m_num_valid_data_bytes(1), m_cur_data_offset(1),
+    m_last_fragment_completed_nal_unit(true)
+{
+    m_input_buffer = new unsigned char[m_input_buffer_size];
+}
+
+H264Fragmenter::~H264Fragmenter()
+{
+    SAFE_DELETE_ARRAY(m_input_buffer);
+}
+
+H264VideoRTPSink::H264VideoRTPSink(Udp *udp, unsigned char rtp_payload_format,
+                                   uint8_t const *sps, unsigned sps_size,
+                                   uint8_t const *pps, unsigned pps_size) :
+    MultiFramedRTPSink(udp, rtp_payload_format, 90000, "H264"),
+    m_our_fragmenter(NULL), m_fmtp_sdp_line(NULL)
+{
+    if (sps) {
+        m_sps_size = sps_size;
+        m_sps = new uint8_t[m_sps_size];
+        memmove(m_sps, sps, m_sps_size);
+    } else {
+        m_sps = NULL;
+        m_sps_size = 0;
+    }
+    if (pps) {
+        m_pps_size = pps_size;
+        m_pps = new uint8_t[m_pps_size];
+        memmove(m_pps, pps, m_pps_size);
+    } else {
+        m_pps = NULL;
+        m_pps_size = 0;
+    }
+}
+
+H264VideoRTPSink::~H264VideoRTPSink()
+{
+    SAFE_FREE(m_fmtp_sdp_line);
+    SAFE_DELETE_ARRAY(m_sps); SAFE_DELETE_ARRAY(m_pps);
+}
+
+char const *H264VideoRTPSink::sdp_media_type() const
+{
+    return "video";
+}
+
+char const *H264VideoRTPSink::aux_sdp_line()
+{
+    if (!m_sps || !m_pps) {
+        LOGW("Unknown sps and/or pps in H264VideoRTPSink");
+        return NULL;
+    }
+
+    uint32_t profile_level_id = (m_sps[1]<<16) | (m_sps[2]<<8) | m_sps[3];
+    char *sps_base64 = base64_encode((char *) m_sps, m_sps_size);
+    char *pps_base64 = base64_encode((char *) m_pps, m_pps_size);
+
+    SAFE_FREE(m_fmtp_sdp_line);
+    m_fmtp_sdp_line = strdup_(STR(sprintf_(
+                    "a=fmtp:%d packetization-mode=1;profile-level-id=%06X;sprop-parameter-sets=%s,%s"CRLF,
+                    rtp_payload_type(), profile_level_id, sps_base64, pps_base64)));
+
+    SAFE_FREE(sps_base64);
+    SAFE_FREE(pps_base64);
+
+    return m_fmtp_sdp_line;
+}
+
+/////////////////////////////////////////////////////////////
+
+MPEG4GenericRTPSink::MPEG4GenericRTPSink(Udp *udp, unsigned char rtp_payload_format,
+                                         uint32_t rtp_timestamp_frequency,
+                                         char const *sdp_media_type_string,
+                                         char const *mpeg4_mode, char const *config_string,
+                                         unsigned num_channels) :
+    MultiFramedRTPSink(udp, rtp_payload_format,
+                       rtp_timestamp_frequency, "MPEG4-GENERIC", num_channels),
+    m_sdp_media_type_string(strdup_(sdp_media_type_string)),
+    m_mpeg4_mode(strdup_(mpeg4_mode)),
+    m_config_string(strdup_(config_string))
+{
+    m_fmtp_sdp_line = strdup_(STR(sprintf_(
+                    "a=fmtp:%d streamtype=5;profile-level-id=1;mode=%s;sizelength=13;indexlength=3;indexdeltalength=3;config=%s"CRLF,
+                    rtp_payload_type(), m_mpeg4_mode, m_config_string)));
+}
+
+MPEG4GenericRTPSink::~MPEG4GenericRTPSink()
+{
+    free((char *) m_sdp_media_type_string);
+    free((char *) m_mpeg4_mode);
+    free((char *) m_config_string);
+    SAFE_FREE(m_fmtp_sdp_line);
+}
+
+char const *MPEG4GenericRTPSink::sdp_media_type() const
+{
+    return m_sdp_media_type_string;
+}
+
+char const *MPEG4GenericRTPSink::aux_sdp_line()
+{
+    return m_fmtp_sdp_line;
 }
 
 }

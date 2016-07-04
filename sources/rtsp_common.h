@@ -8,6 +8,7 @@
 #include <xmedia.h>
 #include <ffmpeg.h>
 #include <xfile.h>
+#include <xqueue.h>
 
 #include "rtp_receiver.h"
 
@@ -517,7 +518,7 @@ public:
     int open(const std::string &url, AddressPort &ap);
     virtual void close();
 
-    int send_request(const char *cmd_url, const std::string &request);
+    int send_request(const char *cmd_url, const std::string &request, const std::string &content = "");
     int recv_response(ResponseInfo *ri);
     int request_options(TaskFunc *proc = NULL);
     int request_describe(std::string &sdp, TaskFunc *proc = NULL);
@@ -525,6 +526,7 @@ public:
     int request_play();
     int request_teardown();
     int request_get_parameter(TaskFunc *proc = NULL);
+    int request_announce(const std::string &sdp);
 
     int request_setup(MediaSubsession &subsession,
                       bool stream_outgoing = false,
@@ -748,64 +750,6 @@ private:
 
 SPropRecord *parse_s_prop_parm_str(const char *parm_str, unsigned &num_s_prop_records);
 
-class RtpSink {
-public:
-    uint8_t rtp_payload_type() const { return m_rtp_payload_type; }
-    unsigned rtp_timestamp_frequency() const { return m_rtp_timestamp_frequency; }
-    void set_rtp_timestamp_frequency(unsigned freq)
-    { m_rtp_timestamp_frequency = freq; }
-    const char *rtp_payload_format_name() const { return m_rtp_payload_format_name; }
-
-    unsigned num_channels() const { return m_num_channels; }
-
-    virtual char const *sdp_media_type() const;
-    virtual char *rtpmap_line() const;
-    virtual char const *aux_sdp_line();
-
-    uint16_t current_seq_num() const { return m_seq_num; }
-    uint32_t preset_next_timestamp();
-
-    struct timeval const &creation_time() const { return m_creation_time; }
-
-protected:
-    RtpSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
-            const char *rtp_payload_format_name, unsigned num_channels);
-    virtual ~RtpSink();
-
-    uint32_t ssrc() const { return m_ssrc; }
-    uint32_t convert_to_rtp_timestamp(struct timeval tv);
-
-private:
-    static uint32_t random32();
-
-protected:
-    Udp *m_udp;
-    uint8_t m_rtp_payload_type;
-    uint64_t m_current_timestamp;
-    uint16_t m_seq_num;
-
-private:
-    DISALLOW_COPY_AND_ASSIGN(RtpSink);
-    uint32_t m_ssrc, m_timestamp_base;
-    uint32_t m_rtp_timestamp_frequency;
-    bool m_next_timestamp_has_been_preset;
-    const char *m_rtp_payload_format_name;
-    unsigned m_num_channels;
-    struct timeval m_creation_time;
-};
-
-class MultiFramedRTPSink : public RtpSink {
-public:
-    void set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size);
-
-protected:
-    MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type,
-                       unsigned rtp_timestamp_frequency,
-                       const char *rtp_payload_format_name,
-                       unsigned num_channels = 1);
-    virtual ~MultiFramedRTPSink();
-};
-
 class OutPacketBuffer {
 public:
     OutPacketBuffer(unsigned preferred_packet_size, unsigned max_packet_size,
@@ -860,6 +804,185 @@ private:
     unsigned m_overflow_data_offset, m_overflow_data_size;
     struct timeval m_overflow_presentation_time;
     unsigned m_overflow_duration_in_microseconds;
+};
+
+uint32_t random32();
+
+class MultiFramedRTPSink {
+public:
+    MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
+                       const char *rtp_payload_format_name, unsigned num_channels = 1);
+    virtual ~MultiFramedRTPSink();
+
+    typedef void (after_playing_func) (void *client_data);
+    bool start_playing(xutil::Queue<xmedia::Frame *> &queue_src, after_playing_func *after_func,
+                       void *after_client_data);
+    virtual void stop_playing();
+    xutil::Queue<xmedia::Frame *> *queue_source() const { return m_queue_src; }
+
+    uint8_t rtp_payload_type() const { return m_rtp_payload_type; }
+    unsigned rtp_timestamp_frequency() const { return m_rtp_timestamp_frequency; }
+    void set_rtp_timestamp_frequency(unsigned freq)
+    { m_rtp_timestamp_frequency = freq; }
+    const char *rtp_payload_format_name() const { return m_rtp_payload_format_name; }
+
+    unsigned num_channels() const { return m_num_channels; }
+
+    virtual char const *sdp_media_type() const = 0;
+    virtual char *rtpmap_line() const;
+    virtual char const *aux_sdp_line();
+
+    uint16_t current_seq_num() const { return m_seq_num; }
+    uint32_t preset_next_timestamp();
+
+    struct timeval const &creation_time() const { return m_creation_time; }
+
+    void set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size);
+
+    typedef void (on_send_error_func)(void* client_data);
+    void set_on_send_error_func(on_send_error_func* on_send_error_func, void* on_send_error_func_data) {
+        m_on_send_error_func = on_send_error_func;
+        m_on_send_error_data = on_send_error_func_data;
+    }
+
+protected:
+    virtual bool continue_playing();
+
+    static void on_source_closure(void *client_data);
+    void on_source_closure();
+
+    xutil::Queue<xmedia::Frame *> *m_queue_src;
+
+    uint32_t ssrc() const { return m_ssrc; }
+    uint32_t convert_to_rtp_timestamp(struct timeval tv);
+
+    virtual void do_special_frame_handling(unsigned fragmentation_offset,
+                                           unsigned char *frame_start,
+                                           unsigned num_bytes_in_frame,
+                                           struct timeval frame_presentation_time,
+                                           unsigned num_remaining_bytes);
+    virtual bool allow_fragmentation_after_start() const;
+    virtual bool allow_other_frames_after_last_fragment() const;
+    virtual bool frame_can_appear_after_packet_start(unsigned char const *frame_start,
+                                                     unsigned num_bytes_in_frame) const;
+    virtual unsigned special_header_size() const;
+    virtual unsigned frame_special_header_size() const;
+    virtual unsigned compute_overflow_for_new_frame(unsigned new_frame_size) const;
+
+    bool is_first_packet() const { return m_is_first_packet; }
+    bool is_first_frame_in_packet() const { return m_num_frames_used_so_far == 0; }
+    unsigned cur_fragmentation_offset() const { return m_cur_fragmentation_offset; }
+    void set_marker_bit();
+    void set_timestamp(struct timeval frame_presentation_time);
+    void set_special_header_word(unsigned word, unsigned word_position = 0);
+    void set_special_header_bytes(unsigned char const *bytes, unsigned num_bytes,
+                                  unsigned byte_position = 0);
+    void set_frame_specific_header_word(unsigned word, unsigned word_position = 0);
+    void set_frame_specific_header_bytes(unsigned char const *bytes, unsigned num_bytes,
+                                         unsigned byte_position = 0);
+    void set_frame_padding(unsigned num_padding_bytes);
+    unsigned num_frames_used_so_far() const { return m_num_frames_used_so_far; }
+    unsigned our_max_packet_size() const { return m_our_max_packet_size; }
+
+private:
+    void build_and_send_packet(bool is_first_packet);
+    void pack_frame();
+    void send_packet_if_necessary();
+    static void send_next(void *first_arg);
+    friend void send_next(void *);
+
+protected:
+    Udp *m_udp;
+    uint8_t m_rtp_payload_type;
+    uint64_t m_current_timestamp;
+    uint16_t m_seq_num;
+
+private:
+    DISALLOW_COPY_AND_ASSIGN(MultiFramedRTPSink);
+
+    after_playing_func *m_after_func;
+    void *m_after_client_data;
+
+    uint32_t m_ssrc, m_timestamp_base;
+    uint32_t m_rtp_timestamp_frequency;
+    bool m_next_timestamp_has_been_preset;
+    const char *m_rtp_payload_format_name;
+    unsigned m_num_channels;
+    struct timeval m_creation_time;
+
+    OutPacketBuffer *m_out_buf;
+
+    bool m_no_frames_left;
+    unsigned m_num_frames_used_so_far;
+    unsigned m_cur_fragmentation_offset;
+    bool m_previous_frame_ended_fragmentation;
+
+    bool m_is_first_packet;
+    struct timeval m_next_send_time;
+    unsigned m_timestamp_position;
+    unsigned m_special_header_position;
+    unsigned m_special_header_size;
+    unsigned m_cur_frame_specific_header_position;
+    unsigned m_cur_frame_specific_header_size;
+    unsigned m_total_frame_specific_header_sizes;
+    unsigned m_our_max_packet_size;
+
+    on_send_error_func* m_on_send_error_func;
+    void* m_on_send_error_data;
+};
+
+class H264Fragmenter {
+public:
+    H264Fragmenter(unsigned input_buffer_max, unsigned max_output_packet_size);
+    ~H264Fragmenter();
+
+    bool last_fragment_completed_nal_unit() const { return m_last_fragment_completed_nal_unit; }
+
+private:
+    DISALLOW_COPY_AND_ASSIGN(H264Fragmenter);
+    unsigned m_input_buffer_size;
+    unsigned m_max_output_packet_size;
+    unsigned char *m_input_buffer;
+    unsigned m_num_valid_data_bytes;
+    unsigned m_cur_data_offset;
+    bool m_last_fragment_completed_nal_unit;
+};
+
+class H264VideoRTPSink : public MultiFramedRTPSink {
+public:
+    H264VideoRTPSink(Udp *udp, unsigned char rtp_payload_format,
+                     uint8_t const *sps = NULL, unsigned sps_size = 0,
+                     uint8_t const *pps = NULL, unsigned pps_size = 0);
+    virtual ~H264VideoRTPSink();
+
+    virtual char const *sdp_media_type() const;
+    virtual char const *aux_sdp_line();
+
+private:
+    DISALLOW_COPY_AND_ASSIGN(H264VideoRTPSink);
+    H264Fragmenter *m_our_fragmenter;
+    char *m_fmtp_sdp_line;
+    uint8_t *m_sps; unsigned m_sps_size;
+    uint8_t *m_pps; unsigned m_pps_size;
+};
+
+class MPEG4GenericRTPSink : public MultiFramedRTPSink {
+public:
+    MPEG4GenericRTPSink(Udp *udp, unsigned char rtp_payload_format,
+                        uint32_t rtp_timestamp_frequency,
+                        char const *sdp_media_type_string,
+                        char const *mpeg4_mode, char const *config_string,
+                        unsigned num_channels);
+    virtual ~MPEG4GenericRTPSink();
+
+    virtual char const *sdp_media_type() const;
+    virtual char const *aux_sdp_line();
+
+private:
+    char const *m_sdp_media_type_string;
+    char const *m_mpeg4_mode;
+    char const *m_config_string;
+    char *m_fmtp_sdp_line;
 };
 
 }
