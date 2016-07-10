@@ -79,11 +79,16 @@ typedef void TaskFunc(void *client_data);
 typedef void *TaskToken;
 
 class MediaSubsession;
+class MultiFramedRTPSink;
+class MultiFramedRTPSource;
 
 class Rtcp {
 public:
     Rtcp(Udp *udp, const char *cname, MediaSubsession *subsess);
+    Rtcp(Udp *udp, MultiFramedRTPSink *sink, MultiFramedRTPSource *source);
     virtual ~Rtcp();
+
+    void set_stream_socket(int sockfd, int stream_channel_id);
 
 #pragma pack(1)
     struct RtcpCommon {
@@ -165,6 +170,8 @@ private:
     char m_peer_sdes_buf[RTCP_RX_SDES_BUF_LEN];
     int m_type_of_event;
     TaskToken m_on_expire_task;
+    MultiFramedRTPSink *m_sink;
+    MultiFramedRTPSource *m_source;
 };
 
 class MultiFramedRTPSource {
@@ -522,7 +529,7 @@ public:
     int recv_response(ResponseInfo *ri);
     int request_options(TaskFunc *proc = NULL);
     int request_describe(std::string &sdp, TaskFunc *proc = NULL);
-    int request_setup(const std::string &sdp);
+    int request_setup(const std::string &sdp, bool stream_outgoing = false, bool stream_using_tcp = false);
     int request_play();
     int request_teardown();
     int request_get_parameter(TaskFunc *proc = NULL);
@@ -590,6 +597,7 @@ private:
     MediaSession *m_sess;
     bool m_server_supports_get_parameter;
     void *m_opaque;
+    int m_tcp_stream_id_count;
 };
 
 class SDPAttribute {
@@ -626,7 +634,7 @@ public:
 
     MediaSubsession *create_new_media_subsession();
 
-    int setup_subsessions(RtspClient *rtsp_client);
+    int setup_subsessions(RtspClient *rtsp_client, bool stream_outgoing = false, bool stream_using_tcp = false);
     int play_subsessions(RtspClient *rtsp_client);
     int enable_subsessions_data();
 
@@ -845,6 +853,8 @@ public:
         m_on_send_error_data = on_send_error_func_data;
     }
 
+    void set_stream_socket(int sockfd, int stream_channel_id);
+
 protected:
     virtual bool continue_playing();
 
@@ -957,6 +967,16 @@ public:
 
     virtual char const *sdp_media_type() const;
     virtual char const *aux_sdp_line();
+
+private:
+    virtual bool continue_playing();
+    virtual void do_special_frame_handling(unsigned fragmentation_offset,
+                                           unsigned char *frame_start,
+                                           unsigned num_bytes_in_frame,
+                                           struct timeval frame_presentation_time,
+                                           unsigned num_remaining_bytes);
+    virtual bool frame_can_appear_after_packet_start(unsigned char const *frame_start,
+                                                     unsigned num_bytes_in_frame) const;
 
 private:
     DISALLOW_COPY_AND_ASSIGN(H264VideoRTPSink);

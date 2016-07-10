@@ -8,6 +8,7 @@
 #include "media_pusher.h"
 
 #define XDEBUG
+#define XDEBUG_MESSAGE
 
 #define DEFAULT_USER_AGENT  "flvpusher (dengxiayehu@yeah.net)"
 
@@ -145,9 +146,26 @@ Rtcp::Rtcp(Udp *udp, const char *cname, MediaSubsession *subsess) :
     on_expire1();
 }
 
+Rtcp::Rtcp(Udp *udp, MultiFramedRTPSink *sink, MultiFramedRTPSource *source) :
+    m_udp(udp), m_subsess(NULL), m_type_of_event(EVENT_SDES),
+    m_on_expire_task(NULL),
+    m_sink(sink), m_source(source)
+{
+}
+
 Rtcp::~Rtcp()
 {
-    g_scheduler->unschedule_delayed_task(m_on_expire_task);
+    if (m_on_expire_task) {
+        g_scheduler->unschedule_delayed_task(m_on_expire_task);
+    }
+}
+
+void Rtcp::set_stream_socket(int sockfd, int stream_channel_id)
+{
+    if (sockfd < 0) return;
+
+    UNUSED(stream_channel_id);
+    m_udp->set_sockfd(sockfd);
 }
 
 void Rtcp::network_read_handler(Rtcp *source, int mask)
@@ -1314,7 +1332,8 @@ RtspClient::RtspClient(void *opaque) :
     m_stream_timer_task(NULL),
     m_sess(NULL),
     m_server_supports_get_parameter(false),
-    m_opaque(opaque)
+    m_opaque(opaque),
+    m_tcp_stream_id_count(0)
 {
     if (!g_scheduler) {
         g_scheduler = new TaskScheduler;
@@ -1422,7 +1441,7 @@ int RtspClient::send_request(const char *cmd_url, const std::string &request, co
             STR(m_user_agent_str),
             STR(field2string()),
             STR(content)));
-#ifdef XDEBUG
+#ifdef XDEBUG_MESSAGE
     LOGD("Sent rtsp request:[%s]", STR(str));
 #endif
     m_fields.clear();
@@ -1455,7 +1474,7 @@ int RtspClient::recv_response(ResponseInfo *pri)
         }
     }
 
-#ifdef XDEBUG
+#ifdef XDEBUG_MESSAGE
     LOGD("Recvd rtsp response:[%s]", m_rrb.buf);
 #endif
 
@@ -1520,7 +1539,7 @@ int RtspClient::recv_response(ResponseInfo *pri)
             break;
         }
 
-#ifdef XDEBUG
+#ifdef XDEBUG_MESSAGE
         LOGD("response_code: %u, response_str:%s, session_parm_str:%s, transport_parm_str:%s, scale_parm_str:%s, range_parm_str:%s, rtp_info_parm_str:%s, public_parm_str:%s, content_base_parm_str:%s, content_type_parm_str:%s",
                 pri->response_code, pri->response_str, pri->session_parm_str, pri->transport_parm_str, pri->scale_parm_str, pri->range_parm_str, pri->rtp_info_parm_str, pri->public_parm_str, pri->content_base_parm_str, pri->content_type_parm_str);
 #endif
@@ -1673,14 +1692,14 @@ string RtspClient::generate_cmd_url(const char *base_url,
         return base_url;
 }
 
-int RtspClient::request_setup(const std::string &sdp)
+int RtspClient::request_setup(const std::string &sdp, bool stream_outgoing, bool stream_using_tcp)
 {
     m_sess = MediaSession::create_new(STR(sdp), m_opaque);
     if (!m_sess) {
         LOGE("Create MediaSession failed");
         return -1;
     }
-    return m_sess->setup_subsessions(this);
+    return m_sess->setup_subsessions(this, stream_outgoing, stream_using_tcp);
 }
 
 int RtspClient::request_play()
@@ -1785,8 +1804,10 @@ int RtspClient::request_setup(MediaSubsession &subsession,
     const char *port_type_str;
     PortNumBits rtp_number, rtcp_number;
     if (stream_using_tcp) {
-        LOGE("Streaming over tcp is not supported");
-        return -1;
+        transport_type_str = "/TCP;unicast";
+        port_type_str = ";interleaved";
+        rtp_number = m_tcp_stream_id_count++;
+        rtcp_number = m_tcp_stream_id_count++;
     } else {
         unsigned conn_address = subsession.connection_endpoint_address();
         bool request_multicast_streaming =
@@ -2446,7 +2467,7 @@ MediaSession *MediaSession::create_new(const char *sdp, void *opaque)
     return new_session;
 }
 
-int MediaSession::setup_subsessions(RtspClient *rtsp_client)
+int MediaSession::setup_subsessions(RtspClient *rtsp_client, bool stream_outgoing, bool stream_using_tcp)
 {
     AddressPort ap;
     if (get_local_address_from_sockfd(rtsp_client->get_sockfd(), ap) < 0)
@@ -2466,7 +2487,7 @@ int MediaSession::setup_subsessions(RtspClient *rtsp_client)
                     (*it)->medium_name(), (*it)->codec_name(), (*it)->client_port_num(), (*it)->client_port_num()+1);
         }
         
-        rtsp_client->request_setup(*(*it), false, false);
+        rtsp_client->request_setup(*(*it), stream_outgoing, stream_using_tcp);
     }
     return 0;
 }
@@ -2781,6 +2802,8 @@ int MediaSubsession::parse_sdp_attr_framerate(const char *sdp_line)
 
 int MediaSubsession::initiate(const std::string &own_ip)
 {
+    if (m_rtp_source) return 0;
+
     do {
         if (!m_codec_name) {
             LOGE("Codec is unspecified");
@@ -3159,6 +3182,14 @@ void MultiFramedRTPSink::set_packet_size(unsigned preferred_packet_size, unsigne
     m_our_max_packet_size = max_packet_size;
 }
 
+void MultiFramedRTPSink::set_stream_socket(int sockfd, int stream_channel_id)
+{
+    if (sockfd < 0) return;
+
+    UNUSED(stream_channel_id);
+    m_udp->set_sockfd(sockfd);
+}
+
 bool MultiFramedRTPSink::start_playing(Queue<Frame *> &queue_src, after_playing_func *after_func,
                                        void *after_client_data)
 {
@@ -3383,6 +3414,13 @@ void MultiFramedRTPSink::set_frame_padding(unsigned num_padding_bytes)
 
 void MultiFramedRTPSink::pack_frame()
 {
+    if (m_out_buf->have_overflow_data()) {
+        unsigned frame_size = m_out_buf->overflow_data_size();
+        struct timeval presentation_time = m_out_buf->overflow_presentation_time();
+        unsigned duration_in_microseconds = m_out_buf->overflow_duration_in_microseconds();
+
+        //after_getting_frame1(frame_size, 0, presentation_time, duration_in_microseconds);
+    }
 }
 
 void MultiFramedRTPSink::send_packet_if_necessary()
@@ -3465,6 +3503,30 @@ char const *H264VideoRTPSink::aux_sdp_line()
     SAFE_FREE(pps_base64);
 
     return m_fmtp_sdp_line;
+}
+
+bool H264VideoRTPSink::continue_playing()
+{
+    if (!m_our_fragmenter) {
+        m_our_fragmenter = new H264Fragmenter(OutPacketBuffer::max_size, our_max_packet_size() - 12);
+    }
+
+    m_queue_src = (xutil::Queue<xmedia::Frame *> *) m_our_fragmenter;
+    return MultiFramedRTPSink::continue_playing();
+}
+
+void H264VideoRTPSink::do_special_frame_handling(unsigned fragmentation_offset,
+                                                 unsigned char *frame_start,
+                                                 unsigned num_bytes_in_frame,
+                                                 struct timeval frame_presentation_time,
+                                                 unsigned num_remaining_bytes)
+{
+}
+
+bool H264VideoRTPSink::frame_can_appear_after_packet_start(unsigned char const *frame_start,
+                                                           unsigned num_bytes_in_frame) const
+{
+    return false;
 }
 
 /////////////////////////////////////////////////////////////
