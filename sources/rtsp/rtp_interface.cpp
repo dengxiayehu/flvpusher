@@ -1,3 +1,4 @@
+#include <sys/ioctl.h>
 #include <xlog.h>
 
 #include "rtp_interface.h"
@@ -25,11 +26,9 @@ static void deregister_socket(int sock_num, unsigned char stream_channel_id)
 
 SocketDescriptor::SocketDescriptor(TaskScheduler *scheduler, int socket_num) :
     m_scheduler(scheduler), m_our_socket_num(socket_num),
+    m_server_request_alternative_byte_handler(NULL), m_server_request_alternative_byte_handler_client_data(NULL),
     m_read_error_occurred(false), m_delete_myself_next(false), m_are_in_read_handler_loop(false),
-    m_tcp_reading_state(AWAITING_DOLLAR),
-    m_next_tcp_read_size(0),
-    m_next_tcp_read_stream_socket_num(-1),
-    m_next_tcp_read_stream_channel_id(0xFF)
+    m_tcp_reading_state(AWAITING_DOLLAR)
 {
 }
 
@@ -61,7 +60,13 @@ void SocketDescriptor::register_interface(unsigned char stream_channel_id, void 
 void SocketDescriptor::tcp_read_handler(SocketDescriptor *socket_descriptor, int mask)
 {
     // Call the read handler until it returns false, with a limit to avoid starving other sockets
-    unsigned count = 2000;
+    int nread = 0;
+    if (ioctl(socket_descriptor->m_our_socket_num, FIONREAD, &nread) < 0) {
+        LOGE("ioctl FIONREAD failed: %s", ERRNOMSG);
+        return;
+    }
+    unsigned count = MIN(2000, nread);
+
     socket_descriptor->m_are_in_read_handler_loop = true;
     while (!socket_descriptor->m_delete_myself_next &&
            socket_descriptor->tcp_read_handler1(mask) &&
@@ -96,7 +101,11 @@ bool SocketDescriptor::tcp_read_handler1(int mask)
         if (c == '$') {
             m_tcp_reading_state = AWAITING_STREAM_CHANNEL_ID;
         } else {
-            // This character is part of a RTSP request or command, ignore it
+            // This character is part of a RTSP request or command
+            if (m_server_request_alternative_byte_handler &&
+                c != 0xFF && c != 0xFE) {
+                m_server_request_alternative_byte_handler(m_server_request_alternative_byte_handler_client_data, c);
+            }
         }
         break;
 
@@ -125,9 +134,9 @@ bool SocketDescriptor::tcp_read_handler1(int mask)
         // Record the information about the packet data that will be read next:
         RtpInterface *rtp_interface = (RtpInterface *) lookup_interface(m_stream_channel_id); 
         if (rtp_interface) {
-            m_next_tcp_read_size = size;
-            m_next_tcp_read_stream_socket_num = m_our_socket_num;
-            m_next_tcp_read_stream_channel_id = m_stream_channel_id;
+            rtp_interface->m_next_tcp_read_size = size;
+            rtp_interface->m_next_tcp_read_stream_socket_num = m_our_socket_num;
+            rtp_interface->m_next_tcp_read_stream_channel_id = m_stream_channel_id;
         }
         m_tcp_reading_state = AWAITING_PACKET_DATA;
         } break;
@@ -137,12 +146,12 @@ bool SocketDescriptor::tcp_read_handler1(int mask)
         m_tcp_reading_state = AWAITING_DOLLAR;
         RtpInterface *rtp_interface = (RtpInterface *) lookup_interface(m_stream_channel_id); 
         if (rtp_interface) {
-            if (m_next_tcp_read_size == 0) {
+            if (rtp_interface->m_next_tcp_read_size == 0) {
                 // We've already read all the data for this packet
                 break;
             }
             LOGW("No handler proc for \"rtp_interface\" for channel %d; need to skip %d remaining bytes\n",
-                 m_our_socket_num, m_stream_channel_id, m_next_tcp_read_size);
+                 m_our_socket_num, m_stream_channel_id, rtp_interface->m_next_tcp_read_size);
             int result = recv(m_our_socket_num, &c, 1, MSG_NOSIGNAL);
             if (result < 0) { // error reading TCP socket, so we will no longer handle it
                 m_read_error_occurred = true;
@@ -151,7 +160,7 @@ bool SocketDescriptor::tcp_read_handler1(int mask)
             } else {
                 m_tcp_reading_state = AWAITING_PACKET_DATA;
                 if (result == 1) {
-                    --m_next_tcp_read_size;
+                    --rtp_interface->m_next_tcp_read_size;
                     call_again = true;
                 }
             }
@@ -211,7 +220,10 @@ TcpStreamRecord::~TcpStreamRecord()
 /////////////////////////////////////////////////////////////
 
 RtpInterface::RtpInterface(TaskScheduler *scheduler) :
-    m_scheduler(scheduler)
+    m_scheduler(scheduler),
+    m_next_tcp_read_size(0),
+    m_next_tcp_read_stream_socket_num(-1),
+    m_next_tcp_read_stream_channel_id(0xFF)
 {
 }
 
@@ -238,8 +250,10 @@ void RtpInterface::set_stream_socket(int sockfd, unsigned char stream_channel_id
 {
     if (sockfd < 0) return;
 
-    m_scheduler->turn_off_background_read_handling(get_sockfd());
-    set_sockfd(-1);
+    if (get_sockfd() != -1) {
+        m_scheduler->turn_off_background_read_handling(get_sockfd());
+        set_sockfd(-1);
+    }
 
     FOR_VECTOR_CONST_ITERATOR(TcpStreamRecord *, m_tcp_stream_record, it) {
         if ((*it)->m_stream_socket_num == sockfd &&
@@ -328,6 +342,15 @@ int RtpInterface::send_data_over_tcp(int socket_num,
         return -1;
     }
     return 0;
+}
+
+void RtpInterface::set_server_request_alternative_byte_handler(int socket_num,
+                                                               server_request_alternative_byte_handler *handler,
+                                                               void *client_data)
+{
+    if (g_socket_table.find(socket_num) != g_socket_table.end()) {
+        g_socket_table[socket_num]->set_server_request_alternative_byte_handler(handler, client_data);
+    }
 }
 
 }

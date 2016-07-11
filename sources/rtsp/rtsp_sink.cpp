@@ -68,6 +68,8 @@ RtspSink::RtspSink(const std::string &flvpath) :
 
 RtspSink::~RtspSink()
 {
+    disconnect();
+
     JOIN_DELETE_THREAD(m_proc_thrd);
 
     FOR_VECTOR_ITERATOR(SubstreamDescriptor *, m_substream_descriptors, it) {
@@ -113,6 +115,8 @@ int RtspSink::disconnect()
         m_video->sink->stop_playing();
     if (m_audio->sink)
         m_audio->sink->stop_playing();
+
+    RtspClient::shutdown_stream(m_client);
     return 0;
 }
 
@@ -250,6 +254,11 @@ int RtspSink::set_destination_and_play()
     m_audio->sink->set_on_send_error_func(on_send_error, this);
     m_audio->sink->start_playing(m_audio->queue, after_playing, m_audio->sink);
 #endif
+
+    RtpInterface::set_server_request_alternative_byte_handler(
+            m_client->get_sockfd(),
+            RtspClient::handle_alternative_request_byte, m_client);
+
     return 0;
 }
 

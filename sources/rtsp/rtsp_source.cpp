@@ -16,6 +16,7 @@ RtspSource::RtspSource(const std::string &input, MediaSink *&sink) :
 
 RtspSource::~RtspSource()
 {
+    RtspClient::shutdown_stream(m_client);
     SAFE_DELETE(m_client);
 }
 

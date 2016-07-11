@@ -54,6 +54,8 @@ public:
 
     void set_stream_socket(int sockfd, unsigned char stream_channel_id);
 
+    virtual RtpInterface *rtp_interface() const { return m_interface; }
+
 protected:
     virtual bool continue_playing();
 

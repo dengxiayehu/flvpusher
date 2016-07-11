@@ -7,6 +7,7 @@
 #define DEFAULT_USER_AGENT  "flvpusher (dengxiayehu@yeah.net)"
 
 //#define XDEBUG
+//#define XDEBUG_RTSP_MESSAGE
 
 using namespace std;
 using namespace xutil;
@@ -14,7 +15,7 @@ using namespace xutil;
 namespace flvpusher {
 
 RtspClient::ResponseInfo::ResponseInfo() :
-    response_code(200), response_str(NULL),
+    response_code(404), response_str(NULL),
     session_parm_str(NULL),
     transport_parm_str(NULL),
     scale_parm_str(NULL),
@@ -34,7 +35,7 @@ RtspClient::ResponseInfo::~ResponseInfo()
 
 void RtspClient::ResponseInfo::reset()
 {
-    response_code = 200;
+    response_code = 404;
     SAFE_FREE(response_str);
     SAFE_FREE(session_parm_str);
     SAFE_FREE(transport_parm_str);
@@ -60,7 +61,9 @@ RtspClient::RtspClient(void *opaque) :
     m_sess(NULL),
     m_server_supports_get_parameter(false),
     m_opaque(opaque),
-    m_tcp_stream_id_count(0)
+    m_tcp_stream_id_count(0),
+    m_continue_after_options(NULL),
+    m_continue_after_get_parameter(NULL)
 {
     m_scheduler = new TaskScheduler;
 }
@@ -110,13 +113,39 @@ int RtspClient::open(const std::string &url,
     return 0;
 }
 
+static char *create_session_string(const char *session_id)
+{
+    char *session_str;
+    if (session_id) {
+        session_str = (char *) malloc(20 + strlen(session_id));
+        sprintf(session_str, "Session: %s", session_id);
+    } else
+        session_str = strdup("");
+    return session_str;
+}
+
 int RtspClient::request_options(TaskFunc *proc)
 {
     if (m_stat < StateConnected)
         return -1;
 
-    if (send_request(STR(generate_cmd_url(m_base_url, NULL)), "OPTIONS") < 0)
+    string cmd_url(generate_cmd_url(m_base_url, m_sess));
+
+    if (m_last_session_id) {
+        char *session_str = create_session_string(m_last_session_id);
+        add_field(session_str);
+        SAFE_FREE(session_str);
+    }
+
+    if (send_request(STR(cmd_url), "OPTIONS") < 0)
         return -1;
+
+    if (m_stat == StatePlaying &&
+        m_tcp_stream_id_count != 0) {
+        m_continue_after_options = proc;
+        m_requests.push("OPTIONS");
+        return 0;
+    }
 
     ResponseInfo ri;
     if (recv_response(&ri) < 0)
@@ -173,13 +202,42 @@ int RtspClient::send_request(const char *cmd_url, const std::string &request, co
     return Tcp::write((const uint8_t *) STR(str), str.length());
 }
 
-int RtspClient::recv_response(ResponseInfo *pri)
+void RtspClient::handle_alternative_request_byte(void *rtsp_client, uint8_t request_byte)
+{
+    ((RtspClient *) rtsp_client)->handle_alternative_request_byte1(request_byte);
+}
+
+void RtspClient::handle_alternative_request_byte1(uint8_t request_byte)
+{
+    ResponseInfo ri;
+    int ret = recv_response(&ri, request_byte);
+    if (ret < 0) {
+        // Handle error
+    } else if (ri.response_code == 200) {
+        string str;
+        if (m_requests.pop(str) == 0) {
+            if (!strcmp(STR(str), "OPTIONS") &&
+                m_continue_after_options) {
+                m_continue_after_options(this);
+            } else if (!strcmp(STR(str), "GET_PARAMETER") &&
+                       m_continue_after_get_parameter) {
+                m_continue_after_get_parameter(this);
+            }
+        }
+    }
+}
+
+int RtspClient::recv_response(ResponseInfo *pri, uint8_t request_byte)
 {
     for ( ; ; ) {
-        int nread;
-        if ((nread = read(m_rrb.buf+m_rrb.nread, m_rrb.get_max_bufsz()-m_rrb.nread)) < 0)
-            return -1;
-        m_rrb.nread += nread;
+        if (request_byte == 0xFF) {
+            int nread;
+            if ((nread = read(m_rrb.buf+m_rrb.nread, m_rrb.get_max_bufsz()-m_rrb.nread)) < 0)
+                return -1;
+            m_rrb.nread += nread;
+        } else {
+            m_rrb.buf[m_rrb.nread++] = request_byte;
+        }
 
         bool end_of_headers = false;
         const uint8_t *ptr = m_rrb.buf;
@@ -196,6 +254,8 @@ int RtspClient::recv_response(ResponseInfo *pri)
         if (end_of_headers) {
             m_rrb.buf[m_rrb.nread] = '\0';
             break;
+        } else if (request_byte != 0xFF) {
+            return 0;
         }
     }
 
@@ -286,24 +346,26 @@ int RtspClient::recv_response(ResponseInfo *pri)
                 }
 
                 // Read num_extra_bytes_needed bytes to fill |Content-Length|
-                LOGW("!Need to read more bytes to fill \"Content-Length\"");
-                int n2read = num_extra_bytes_needed;
-                if (readn(m_rrb.buf+m_rrb.nread, n2read) != n2read) {
-                    ret = -1;
+                if (request_byte == 0xFF) {
+                    int n2read = num_extra_bytes_needed;
+                    if (readn(m_rrb.buf+m_rrb.nread, n2read) != n2read) {
+                        ret = -1;
+                        break;
+                    }
+                    memcpy(pri->body_start+pri->num_body_bytes, m_rrb.buf+m_rrb.nread, n2read);
+                    pri->num_body_bytes += n2read;
+                    m_rrb.reset();
+                    break;
+                } else {
+                    ret = 0;
                     break;
                 }
-                memcpy(pri->body_start+pri->num_body_bytes, m_rrb.buf+m_rrb.nread, n2read);
-                pri->num_body_bytes += n2read;
-                m_rrb.reset();
-                break;
             }
         }
 
         int num_extra_bytes_after_response =
             m_rrb.nread - (body_offset + content_length);
         if (num_extra_bytes_after_response != 0) {
-            LOGD("Extra bytes(%d) after one rtsp response",
-                    num_extra_bytes_after_response);
             memmove(m_rrb.buf, m_rrb.buf+body_offset+content_length,
                     num_extra_bytes_after_response);
             m_rrb.nread = num_extra_bytes_after_response;
@@ -315,7 +377,9 @@ int RtspClient::recv_response(ResponseInfo *pri)
     SAFE_FREE(header_data_copy);
     if (ret < 0 || pri->response_code != 200) {
         pri->reset();
-        ret = -1;
+        if (request_byte != 0xFF) {
+            ret = -1;
+        }
     }
     return ret;
 }
@@ -371,17 +435,6 @@ bool RtspClient::check_for_header(char *line,
     SAFE_FREE(header_parm);
     header_parm = strdup(&line[parm_index]);
     return true;
-}
-
-char *create_session_string(const char *session_id)
-{
-    char *session_str;
-    if (session_id) {
-        session_str = (char *) malloc(20 + strlen(session_id));
-        sprintf(session_str, "Session: %s", session_id);
-    } else
-        session_str = strdup("");
-    return session_str;
 }
 
 char *RtspClient::create_blocksize_string(bool stream_using_tcp)
@@ -457,11 +510,18 @@ int RtspClient::request_teardown()
     add_field(session_str);
     SAFE_FREE(session_str);
 
-    if (send_request(STR(cmd_url), "TEARDOWN") > 0) {
-        ResponseInfo ri;
-        if (!recv_response(&ri)) {
-            m_stat = StateInit;
-        }
+    if (send_request(STR(cmd_url), "TEARDOWN") < 0)
+        return -1;
+
+    if (m_stat == StatePlaying &&
+        m_tcp_stream_id_count != 0) {
+        m_requests.push("TEARDOWN");
+        return 0;
+    }
+
+    ResponseInfo ri;
+    if (!recv_response(&ri)) {
+        m_stat = StateInit;
     }
     return 0;
 }
@@ -479,11 +539,20 @@ int RtspClient::request_get_parameter(TaskFunc *proc)
     add_field(session_str);
     SAFE_FREE(session_str);
 
-    if (send_request(STR(cmd_url), "GET_PARAMETER") > 0) {
-        ResponseInfo ri;
-        if (!recv_response(&ri)) {
-            m_stat = StateInit;
-        }
+    if (send_request(STR(cmd_url), "GET_PARAMETER") < 0)
+        return -1;
+
+    if (m_stat == StatePlaying &&
+        m_tcp_stream_id_count != 0) {
+        m_continue_after_get_parameter = proc;
+        m_requests.push("GET_PARAMETER");
+        return 0;
+    }
+
+    ResponseInfo ri;
+    if (!recv_response(&ri)) {
+        m_stat = StateInit;
+        return -1;
     }
 
     if (proc) proc(this);
@@ -578,8 +647,9 @@ int RtspClient::request_setup(MediaSubsession *subsession,
 
                     const char *after_session_id = ri.session_parm_str + strlen(session_id);
                     int timeout_val;
-                    if (sscanf(after_session_id, ";timeout=%d", &timeout_val) == 1)
+                    if (sscanf(after_session_id, ";timeout=%d", &timeout_val) == 1) {
                         m_session_timeout_parameter = timeout_val;
+                    }
                 } while (0);
                 SAFE_FREE(session_id);
             } else {
@@ -827,16 +897,135 @@ void RtspClient::stream_timer_handler(void *client_data)
 
 void RtspClient::shutdown_stream(RtspClient *rtsp_client)
 {
-    if (rtsp_client->request_teardown() < 0) {
-        LOGE("Failed to send TEARDOWN command (cont)");
+    if (rtsp_client->m_stat == StatePlaying) {
+        if (rtsp_client->request_teardown() < 0) {
+            LOGE("Failed to send TEARDOWN command (cont)");
+        }
+        rtsp_client->m_scheduler->ask2quit();
     }
-    rtsp_client->m_scheduler->ask2quit();
 }
 
 bool RtspClient::rtsp_option_is_supported(const char *command_name,
                                           const char *public_parm_str)
 {
     return !!strcasestr(public_parm_str, command_name);
+}
+
+/////////////////////////////////////////////////////////////
+
+std::string RtspUrl::to_string() const
+{
+    return sprintf_("rtsp://%s%s/%s",
+                    username.empty() ? "" : STR(username + ":" + passwd + "@"),
+                    STR(srvap.to_string()),
+                    STR(stream_name));
+}
+
+RtspRecvBuf::RtspRecvBuf()
+{
+    reset();
+}
+
+int RtspRecvBuf::get_max_bufsz() const
+{
+    return sizeof(buf);
+}
+
+void RtspRecvBuf::reset()
+{
+    nread = 0;
+    last_crlf = &buf[-3];
+}
+
+Rtsp::Rtsp() :
+    m_stat(StateInit),
+    m_cseq(0)
+{
+}
+
+Rtsp::~Rtsp()
+{
+}
+
+int Rtsp::parse_url(const string surl, RtspUrl &rtsp_url)
+{
+    const char *url = STR(surl), *p = strstr(url, "://");
+    if (!p) {
+        LOGE("RTSP url: No :// in url");
+        return -1;
+    }
+
+    if (p-url!=4 || strncasecmp(url, "rtsp", 4)) {
+        LOGE("Unknown protocol, not rtsp");
+        return -1;
+    }
+
+    char tmp[2048];
+    const char *from = p + 3;
+    const char *colon_passwd_start = NULL;
+    for (p = from; *p && *p != '/'; ++p) {
+        if (*p == ':' && !colon_passwd_start)
+            colon_passwd_start = p;
+        else if (*p == '@') {
+            if (!colon_passwd_start)
+                colon_passwd_start = p;
+
+            const char *username_start = from;
+            int username_len = colon_passwd_start - username_start;
+            strncpy(tmp, username_start, username_len);
+            tmp[username_len] = '\0';
+            rtsp_url.username = tmp;
+
+            const char *passwd_start = colon_passwd_start;
+            if (passwd_start < p) ++passwd_start;
+            int passwd_len = p - passwd_start;
+            strncpy(tmp, passwd_start, passwd_len);
+            tmp[passwd_len] = '\0';
+            rtsp_url.passwd = tmp;
+
+            from = p + 1;
+            break;
+        }
+    }
+
+    int i;
+    for (i = 0;
+         from[i] && from[i] != ':' && from[i] != '/';
+         ++i)
+        tmp[i] = from[i];
+    tmp[i] = '\0';
+    rtsp_url.srvap.set_address(tmp);
+
+    if (from[i] == ':') {
+        for (p = from + i + 1, i = 0;
+             *p && *p != '/';
+             ++i, ++p)
+            tmp[i] = *p;
+        tmp[i] = '\0';
+        rtsp_url.srvap.set_port(atoi(tmp));
+        from = p;
+    } else {
+        rtsp_url.srvap.set_port(RTSP_PROTOCOL_PORT);
+        from += i;
+    }
+
+    rtsp_url.stream_name = ++from;
+    return 0;
+}
+
+void Rtsp::add_field(const std::string &field)
+{
+    if (field.empty()) return;
+    m_fields.push_back(field+CRLF);
+}
+
+std::string Rtsp::field2string() const
+{
+    string str;
+    FOR_VECTOR_CONST_ITERATOR(string, m_fields, it) {
+        str += (*it);
+    }
+    return str;
 }
 
 }

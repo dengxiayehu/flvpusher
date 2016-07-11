@@ -106,7 +106,6 @@ private:
     TaskScheduler *m_scheduler;
 };
 
-
 }
 
 #endif /* end of _RTCP_H_ */

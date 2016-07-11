@@ -16,121 +16,6 @@ namespace flvpusher {
 
 std::map<int, SocketDescriptor *> g_socket_table;
 
-std::string RtspUrl::to_string() const
-{
-    return sprintf_("rtsp://%s%s/%s",
-                    username.empty() ? "" : STR(username + ":" + passwd + "@"),
-                    STR(srvap.to_string()),
-                    STR(stream_name));
-}
-
-RtspRecvBuf::RtspRecvBuf()
-{
-    reset();
-}
-
-int RtspRecvBuf::get_max_bufsz() const
-{
-    return sizeof(buf);
-}
-
-void RtspRecvBuf::reset()
-{
-    nread = 0;
-    last_crlf = &buf[-3];
-}
-
-Rtsp::Rtsp() :
-    m_stat(StateInit),
-    m_cseq(0)
-{
-}
-
-Rtsp::~Rtsp()
-{
-}
-
-int Rtsp::parse_url(const string surl, RtspUrl &rtsp_url)
-{
-    const char *url = STR(surl), *p = strstr(url, "://");
-    if (!p) {
-        LOGE("RTSP url: No :// in url");
-        return -1;
-    }
-
-    if (p-url!=4 || strncasecmp(url, "rtsp", 4)) {
-        LOGE("Unknown protocol, not rtsp");
-        return -1;
-    }
-
-    char tmp[2048];
-    const char *from = p + 3;
-    const char *colon_passwd_start = NULL;
-    for (p = from; *p && *p != '/'; ++p) {
-        if (*p == ':' && !colon_passwd_start)
-            colon_passwd_start = p;
-        else if (*p == '@') {
-            if (!colon_passwd_start)
-                colon_passwd_start = p;
-
-            const char *username_start = from;
-            int username_len = colon_passwd_start - username_start;
-            strncpy(tmp, username_start, username_len);
-            tmp[username_len] = '\0';
-            rtsp_url.username = tmp;
-
-            const char *passwd_start = colon_passwd_start;
-            if (passwd_start < p) ++passwd_start;
-            int passwd_len = p - passwd_start;
-            strncpy(tmp, passwd_start, passwd_len);
-            tmp[passwd_len] = '\0';
-            rtsp_url.passwd = tmp;
-
-            from = p + 1;
-            break;
-        }
-    }
-
-    int i;
-    for (i = 0;
-         from[i] && from[i] != ':' && from[i] != '/';
-         ++i)
-        tmp[i] = from[i];
-    tmp[i] = '\0';
-    rtsp_url.srvap.set_address(tmp);
-
-    if (from[i] == ':') {
-        for (p = from + i + 1, i = 0;
-             *p && *p != '/';
-             ++i, ++p)
-            tmp[i] = *p;
-        tmp[i] = '\0';
-        rtsp_url.srvap.set_port(atoi(tmp));
-        from = p;
-    } else {
-        rtsp_url.srvap.set_port(RTSP_PROTOCOL_PORT);
-        from += i;
-    }
-
-    rtsp_url.stream_name = ++from;
-    return 0;
-}
-
-void Rtsp::add_field(const std::string &field)
-{
-    if (field.empty()) return;
-    m_fields.push_back(field+CRLF);
-}
-
-std::string Rtsp::field2string() const
-{
-    string str;
-    FOR_VECTOR_CONST_ITERATOR(string, m_fields, it) {
-        str += (*it);
-    }
-    return str;
-}
-
 intptr_t DelayQueueEntry::token_counter = 0;
 
 DelayQueueEntry::DelayQueueEntry(timeval tv) :
@@ -278,8 +163,7 @@ int TaskScheduler::do_event_loop(volatile bool *watch_variable)
 {
     m_watch_variable = watch_variable;
     for ( ; ; ) {
-        if (m_watch_variable && *m_watch_variable)
-            break;
+        if (quit()) break;
         if (single_step() < 0)
             return -1;
     }

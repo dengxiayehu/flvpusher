@@ -1,9 +1,67 @@
 #ifndef _RTSP_CLIENT_H_
 #define _RTSP_CLIENT_H_
 
+#include <xnet.h>
+#include <xqueue.h>
+
 #include "rtsp_common.h"
 
+using namespace xnet;
+
 namespace flvpusher {
+
+enum ServerState {
+    StateInit = 0,
+    StateConnected,
+    StateReady,
+    StatePlaying,
+    StatePause,
+};
+
+enum TransportMode {
+    RtpUdp = 1,
+    RtpTcp,
+    RawUdp
+};
+
+struct RtspUrl {
+    AddressPort srvap;
+    std::string username;
+    std::string passwd;
+    std::string stream_name;
+
+    std::string to_string() const;
+};
+
+struct RtspRecvBuf {
+    uint8_t buf[RTSP_MSG_BUFSIZ];
+    int nread;
+    uint8_t *last_crlf;
+
+    RtspRecvBuf();
+    int get_max_bufsz() const;
+    void reset();
+};
+
+class Rtsp : public Tcp {
+public:
+    Rtsp();
+    virtual ~Rtsp();
+
+    void add_field(const std::string &field);
+    std::string field2string() const;
+
+protected:
+    static int parse_url(const std::string surl, RtspUrl &rtsp_url);
+
+protected:
+    ServerState m_stat;
+    int m_cseq;
+    std::string m_session;
+    std::vector<std::string> m_fields;
+};
+
+/////////////////////////////////////////////////////////////
 
 class MediaSession;
 class MediaSubsession;
@@ -34,10 +92,10 @@ public:
     virtual ~RtspClient();
 
     int open(const std::string &url, AddressPort &ap);
-    virtual void close();
+    void close();
 
     int send_request(const char *cmd_url, const std::string &request, const std::string &content = "");
-    int recv_response(ResponseInfo *ri);
+    int recv_response(ResponseInfo *ri, uint8_t request_byte = 0xFF);
     int request_options(TaskFunc *proc = NULL);
     int request_describe(std::string &sdp, TaskFunc *proc = NULL);
     int request_setup(const std::string &sdp, bool stream_outgoing = false, bool stream_using_tcp = false);
@@ -72,6 +130,12 @@ public:
     static void continue_after_describe(void *client_data);
     static void continue_after_get_parameter(void *client_data);
 
+    static void handle_alternative_request_byte(void *, uint8_t request_byte);
+    void handle_alternative_request_byte1(uint8_t request_byte);
+
+    static void stream_timer_handler(void *client_data);
+    static void shutdown_stream(RtspClient *rtsp_client);
+
 private:
     static char *get_line(char *start_of_line);
     static bool parse_response_code(char *line,
@@ -91,9 +155,6 @@ private:
     void schedule_liveness_command();
     static void send_liveness_command(void *client_data);
 
-    static void stream_timer_handler(void *client_data);
-    static void shutdown_stream(RtspClient *rtsp_client);
-
     static bool rtsp_option_is_supported(const char *command_name,
                                          const char *public_parm_str);
 
@@ -112,6 +173,9 @@ private:
     void *m_opaque;
     int m_tcp_stream_id_count;
     TaskScheduler *m_scheduler;
+    TaskFunc *m_continue_after_options,
+             *m_continue_after_get_parameter;
+    xutil::Queue<std::string> m_requests;
 };
 
 }

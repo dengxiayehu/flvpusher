@@ -4,66 +4,11 @@
 #include <string>
 #include <vector>
 
-#include <xnet.h>
-
 #define RTSP_PROTOCOL_PORT  554
 #define CRLF    "\r\n"
 #define RTSP_MSG_BUFSIZ     20000
 
-using namespace xnet;
-
 namespace flvpusher {
-
-enum ServerState {
-    StateInit = 0,
-    StateConnected,
-    StateReady,
-    StatePlaying,
-    StatePause,
-};
-
-enum TransportMode {
-    RtpUdp = 1,
-    RtpTcp,
-    RawUdp
-};
-
-struct RtspUrl {
-    AddressPort srvap;
-    std::string username;
-    std::string passwd;
-    std::string stream_name;
-
-    std::string to_string() const;
-};
-
-struct RtspRecvBuf {
-    uint8_t buf[RTSP_MSG_BUFSIZ];
-    int nread;
-    uint8_t *last_crlf;
-
-    RtspRecvBuf();
-    int get_max_bufsz() const;
-    void reset();
-};
-
-class Rtsp : public Tcp {
-public:
-    Rtsp();
-    virtual ~Rtsp();
-
-    void add_field(const std::string &field);
-    std::string field2string() const;
-
-protected:
-    static int parse_url(const std::string surl, RtspUrl &rtsp_url);
-
-protected:
-    ServerState m_stat;
-    int m_cseq;
-    std::string m_session;
-    std::vector<std::string> m_fields;
-};
 
 typedef void TaskFunc(void *client_data);
 typedef void *TaskToken;
@@ -217,6 +162,7 @@ public:
 
     int do_event_loop(volatile bool *watch_variable);
     void ask2quit() { if (m_watch_variable) *m_watch_variable = true; }
+    bool quit() const { return m_watch_variable ? *m_watch_variable : false; }
 
     int single_step(unsigned max_delay_time = 10000);
 
