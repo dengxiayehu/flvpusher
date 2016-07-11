@@ -23,7 +23,6 @@ public:
     bool start_playing(xutil::Queue<xmedia::Frame *> &queue_src,
                        after_playing_func *after_func, void *after_client_data);
     virtual void stop_playing();
-    xutil::Queue<xmedia::Frame *> *queue_source() const { return m_queue_src; }
 
     uint8_t rtp_payload_type() const { return m_rtp_payload_type; }
     unsigned rtp_timestamp_frequency() const { return m_rtp_timestamp_frequency; }

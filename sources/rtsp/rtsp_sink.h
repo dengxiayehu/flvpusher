@@ -33,6 +33,7 @@ private:
     int set_destination_and_play();
 
     static void after_playing(void *client_data);
+    static void on_send_error(void *on_send_error_data);
 
     struct MediaAggregation {
         xutil::Queue<xmedia::Frame *> queue;
@@ -56,6 +57,7 @@ private:
     std::vector<SubstreamDescriptor *> m_substream_descriptors;
     unsigned m_last_track_id;
     MediaAggregation *m_video, *m_audio;
+    bool m_send_error;
 };
 
 }

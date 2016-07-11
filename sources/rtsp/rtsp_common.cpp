@@ -7,9 +7,6 @@
 #include "rtsp_common.h"
 #include "common/media_pusher.h"
 
-//#define XDEBUG
-//#define XDEBUG_RTSP_MESSAGE
-
 using namespace std;
 using namespace xmedia;
 using namespace xutil;

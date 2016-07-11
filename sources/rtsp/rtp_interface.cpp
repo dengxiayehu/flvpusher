@@ -3,6 +3,8 @@
 #include "rtp_interface.h"
 #include "rtsp_common.h"
 
+//#define XDEBUG
+
 using namespace std;
 
 namespace flvpusher {
@@ -77,8 +79,11 @@ bool SocketDescriptor::tcp_read_handler1(int mask)
     if (m_tcp_reading_state != AWAITING_PACKET_DATA) {
         int result = recv(m_our_socket_num, &c, 1, MSG_NOSIGNAL);
         if (!result) {
+            LOGD("socket_num (%d) closed", m_our_socket_num);
             return false;
         } else if (result != 1) {
+            LOGE("socket_num (%d) recv failed: %s",
+                 m_our_socket_num, ERRNOMSG);
             m_read_error_occurred = true;
             m_delete_myself_next = true;
             return false;
@@ -234,7 +239,6 @@ void RtpInterface::set_stream_socket(int sockfd, unsigned char stream_channel_id
     if (sockfd < 0) return;
 
     m_scheduler->turn_off_background_read_handling(get_sockfd());
-    ::close(get_sockfd());
     set_sockfd(-1);
 
     FOR_VECTOR_CONST_ITERATOR(TcpStreamRecord *, m_tcp_stream_record, it) {
@@ -284,11 +288,12 @@ int RtpInterface::write(const uint8_t *buf, int size, struct sockaddr_in *remote
         return Udp::write(buf, size, remote);
     }
 
-    int ret = 0;
+    int ret = -1;
     FOR_VECTOR_CONST_ITERATOR(TcpStreamRecord *, m_tcp_stream_record, it) {
         if (send_rtp_or_rtcp_packet_over_tcp((uint8_t *) buf, size,
-                                             (*it)->m_stream_socket_num, (*it)->m_stream_channel_id) < 0)
-            ret = -1;
+                                             (*it)->m_stream_socket_num, (*it)->m_stream_channel_id) < 0) {
+            return -1;
+        } else ret = 0;
     }
     return ret;
 } 

@@ -79,6 +79,7 @@ bool MultiFramedRTPSink::start_playing(Queue<Frame *> &queue_src,
 
     m_after_func = after_func;
     m_after_client_data = after_client_data;
+
     return continue_playing();
 }
 

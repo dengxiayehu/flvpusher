@@ -6,6 +6,8 @@
 
 #define DEFAULT_USER_AGENT  "flvpusher (dengxiayehu@yeah.net)"
 
+//#define XDEBUG
+
 using namespace std;
 using namespace xutil;
 
@@ -832,7 +834,7 @@ void RtspClient::shutdown_stream(RtspClient *rtsp_client)
 }
 
 bool RtspClient::rtsp_option_is_supported(const char *command_name,
-        const char *public_parm_str)
+                                          const char *public_parm_str)
 {
     return !!strcasestr(public_parm_str, command_name);
 }

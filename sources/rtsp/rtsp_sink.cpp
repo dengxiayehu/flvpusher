@@ -60,7 +60,8 @@ RtspSink::RtspSink(const std::string &flvpath) :
     m_proc_thrd(NULL),
     m_substream_sdp_sizes(0),
     m_last_track_id(0),
-    m_video(new MediaAggregation), m_audio(new MediaAggregation)
+    m_video(new MediaAggregation), m_audio(new MediaAggregation),
+    m_send_error(false)
 {
     m_client = new RtspClient(NULL);
 }
@@ -108,12 +109,18 @@ void *RtspSink::proc_routine(void *arg)
 
 int RtspSink::disconnect()
 {
+    if (m_video->sink)
+        m_video->sink->stop_playing();
+    if (m_audio->sink)
+        m_audio->sink->stop_playing();
     return 0;
 }
 
 int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
 {
     AutoLock _l(m_mutex);
+
+    if (m_send_error) return -1;
 
     if (!m_video->sink) {
         VideoRawParser vparser;
@@ -144,6 +151,8 @@ int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
 int RtspSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
 {
     AutoLock _l(m_mutex);
+
+    if (m_send_error) return -1;
 
     if (!m_audio->sink) {
         AudioRawParser aparser;
@@ -179,7 +188,8 @@ void RtspSink::add_stream(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp)
 {
     if (!rtp_sink) return;
 
-    SubstreamDescriptor *new_descriptor = new SubstreamDescriptor(rtp_sink, rtcp, ++m_last_track_id);
+    SubstreamDescriptor *new_descriptor =
+        new SubstreamDescriptor(rtp_sink, rtcp, ++m_last_track_id);
     m_substream_descriptors.push_back(new_descriptor);
     m_substream_sdp_sizes += strlen(new_descriptor->sdp_lines());
 }
@@ -234,8 +244,10 @@ int RtspSink::set_destination_and_play()
 
     m_client->increate_send_buffer_to(100*1024);
 
+    m_video->sink->set_on_send_error_func(on_send_error, this);
     m_video->sink->start_playing(m_video->queue, after_playing, m_video->sink);
 #if 0
+    m_audio->sink->set_on_send_error_func(on_send_error, this);
     m_audio->sink->start_playing(m_audio->queue, after_playing, m_audio->sink);
 #endif
     return 0;
@@ -245,7 +257,15 @@ void RtspSink::after_playing(void *client_data)
 {
     MultiFramedRTPSink *rtp_sink = (MultiFramedRTPSink *) client_data;
     rtp_sink->stop_playing();
-    rtp_sink->stop_playing();
+}
+
+void RtspSink::on_send_error(void *on_send_error_data)
+{
+    RtspSink *rtsp_sink = (RtspSink *) on_send_error_data;
+    if (!rtsp_sink->m_send_error) {
+        rtsp_sink->disconnect();
+        rtsp_sink->m_send_error = true;
+    }
 }
 
 /////////////////////////////////////////////////////////////
@@ -257,6 +277,9 @@ RtspSink::MediaAggregation::MediaAggregation() :
 
 RtspSink::MediaAggregation::~MediaAggregation()
 {
+    if (sink)
+        sink->stop_playing();
+
     Frame *f;
     queue.cancel_wait();
     while (!queue.pop(f)) { SAFE_DELETE(f); }
