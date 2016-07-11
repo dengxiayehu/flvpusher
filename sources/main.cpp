@@ -1,7 +1,7 @@
 #include <memory>
 
-#include "app.h"
-#include "config.h"
+#include "app/app.h"
+#include "common/config.h"
 
 using namespace flvpusher;
 
