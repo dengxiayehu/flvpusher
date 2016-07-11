@@ -480,10 +480,14 @@ Udp::Udp(const char *ip, const uint16_t port)
 
 void Udp::init_remote_addr(const AddressPort &ap)
 {
-    memset(&m_remote_addr, 0, sizeof(m_remote_addr));
-    m_remote_addr.sin_family = AF_INET;
-    m_remote_addr.sin_port = htons(ap.get_port());
-    m_remote_addr.sin_addr.s_addr = inet_addr(ap.get_address());
+    if (!strcmp(ap.get_address(), "0.0.0.0")) {
+        m_remote_addr = (struct sockaddr_in *) calloc(1, sizeof(struct sockaddr_in));
+        m_remote_addr->sin_family = AF_INET;
+        m_remote_addr->sin_port = htons(ap.get_port());
+        m_remote_addr->sin_addr.s_addr = inet_addr(ap.get_address());
+    } else {
+        m_remote_addr = NULL;
+    }
 }
 
 int Udp::open(AddressPort &ap)
@@ -546,7 +550,12 @@ int Udp::open(AddressPort &ap)
 
 int Udp::write(const uint8_t *buf, int size, struct sockaddr_in *remote)
 {
-    return Socket::write(buf, size, remote ? remote : &m_remote_addr);
+    return Socket::write(buf, size, remote ? remote : m_remote_addr);
+}
+
+Udp::~Udp()
+{
+    SAFE_FREE(m_remote_addr);
 }
 
 int network_wait_fd(int fd, int write, int timeout)

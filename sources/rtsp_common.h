@@ -11,6 +11,7 @@
 #include <xqueue.h>
 
 #include "rtp_receiver.h"
+#include "raw_parser.h"
 
 #define RTSP_PROTOCOL_PORT  554
 #define CRLF    "\r\n"
@@ -81,14 +82,16 @@ typedef void *TaskToken;
 class MediaSubsession;
 class MultiFramedRTPSink;
 class MultiFramedRTPSource;
+class TaskScheduler;
+struct TcpStreamRecord;
+class RtpInterface;
 
 class Rtcp {
 public:
-    Rtcp(Udp *udp, const char *cname, MediaSubsession *subsess);
-    Rtcp(Udp *udp, MultiFramedRTPSink *sink, MultiFramedRTPSource *source);
+    Rtcp(TaskScheduler *scheduler, RtpInterface *interface, const char *cname, MediaSubsession *subsess);
     virtual ~Rtcp();
 
-    void set_stream_socket(int sockfd, int stream_channel_id);
+    void set_stream_socket(int sockfd, unsigned char stream_channel_id);
 
 #pragma pack(1)
     struct RtcpCommon {
@@ -163,7 +166,7 @@ private:
     void send_sdes();
 
 private:
-    Udp *m_udp;
+    RtpInterface *m_interface;
     MediaSubsession *m_subsess;
     RtcpSDES m_peer_sdes;
     enum {RTCP_RX_SDES_BUF_LEN = 64};
@@ -172,11 +175,12 @@ private:
     TaskToken m_on_expire_task;
     MultiFramedRTPSink *m_sink;
     MultiFramedRTPSource *m_source;
+    TaskScheduler *m_scheduler;
 };
 
 class MultiFramedRTPSource {
 public:
-    MultiFramedRTPSource(Udp *udp, unsigned char rtp_payload_format,
+    MultiFramedRTPSource(TaskScheduler *scheduler, RtpInterface *interface, unsigned char rtp_payload_format,
                          unsigned rtp_timestamp_frequency, void *opaque = NULL);
     virtual ~MultiFramedRTPSource();
 
@@ -202,7 +206,8 @@ private:
     enum {INITIAL_TIMESTAMP_OFFSET = 1989};
 
 protected:
-    Udp *m_udp;
+    TaskScheduler *m_scheduler;
+    RtpInterface *m_interface;
     unsigned char m_rtp_payload_format;
     unsigned m_rtp_timestamp_frequency;
     bool m_are_doing_network_reads;
@@ -234,7 +239,7 @@ private:
 
 class H264VideoRTPSource : public MultiFramedRTPSource {
 public:
-    H264VideoRTPSource(Udp *udp, unsigned char rtp_payload_format,
+    H264VideoRTPSource(TaskScheduler *scheduler, RtpInterface *interface, unsigned char rtp_payload_format,
                        unsigned rtp_timestamp_frequency, const char *s_prop_parm_str = NULL,
                        void *opaque = NULL);
     virtual ~H264VideoRTPSource();
@@ -256,7 +261,7 @@ private:
 
 class MPEG4GenericRTPSource : public MultiFramedRTPSource {
 public:
-    MPEG4GenericRTPSource(Udp *udp,
+    MPEG4GenericRTPSource(TaskScheduler *scheduler, RtpInterface *interface,
                           unsigned char rtp_payload_format,
                           unsigned rtp_timestamp_frequency,
                           const char *medium_name,
@@ -555,6 +560,8 @@ public:
 
     int loop(volatile bool *watch_variable);
 
+    TaskScheduler *scheduler() const { return m_scheduler; }
+
     static void continue_after_option(void *client_data);
     static void continue_after_describe(void *client_data);
     static void continue_after_get_parameter(void *client_data);
@@ -598,6 +605,7 @@ private:
     bool m_server_supports_get_parameter;
     void *m_opaque;
     int m_tcp_stream_id_count;
+    TaskScheduler *m_scheduler;
 };
 
 class SDPAttribute {
@@ -619,7 +627,7 @@ private:
 
 class MediaSession {
 public:
-    MediaSession(void *opaque = NULL);
+    MediaSession(RtspClient *rtsp_client, void *opaque = NULL);
     ~MediaSession();
 
     int initialize_with_sdp(const std::string &sdp);
@@ -634,11 +642,11 @@ public:
 
     MediaSubsession *create_new_media_subsession();
 
-    int setup_subsessions(RtspClient *rtsp_client, bool stream_outgoing = false, bool stream_using_tcp = false);
-    int play_subsessions(RtspClient *rtsp_client);
+    int setup_subsessions(bool stream_outgoing = false, bool stream_using_tcp = false);
+    int play_subsessions();
     int enable_subsessions_data();
 
-    static MediaSession *create_new(const char *sdp, void *opaque = NULL);
+    static MediaSession *create_new(RtspClient *rtsp_client, const char *sdp, void *opaque = NULL);
     static char *lookup_payload_format(unsigned char rtp_payload_type,
                                        unsigned &freq, unsigned &nchannel);
     static unsigned guess_rtp_timestamp_frequency(const char *medium_name, const char *codec_name);
@@ -652,9 +660,11 @@ public:
     float &scale() { return m_scale; }
     const char *CNAME() const { return m_cname; }
 
+    RtspClient *rtsp_client() const { return m_client; }
     void *&opaque() { return m_opaque; }
 
 private:
+    RtspClient *m_client;
     char *m_sess_name;
     char *m_sess_desc;
     char *m_conn_endpoint_name;
@@ -749,14 +759,69 @@ private:
     unsigned short m_video_width;
     unsigned short m_video_height;
     unsigned m_video_fps;
-    Udp *m_rtp_socket;
-    Udp *m_rtcp_socket;
+    RtpInterface *m_rtp_socket;
+    RtpInterface *m_rtcp_socket;
     MultiFramedRTPSource *m_rtp_source;
     Rtcp *m_rtcp;
     char *m_session_id;
 };
 
 SPropRecord *parse_s_prop_parm_str(const char *parm_str, unsigned &num_s_prop_records);
+
+class SocketDescriptor {
+public:
+    SocketDescriptor(TaskScheduler *scheduler, int socket_num);
+    virtual ~SocketDescriptor();
+
+    void register_interface(unsigned char stream_channel_id, void *);
+    void *lookup_interface(unsigned char stream_channel_id);
+    void deregister_interface(unsigned char stream_channel_id);
+
+private:
+    static void tcp_read_handler(SocketDescriptor *, int mask);
+    bool tcp_read_handler1(int mask);
+
+private:
+    TaskScheduler *m_scheduler;
+    int m_our_socket_num;
+    std::map<unsigned char, void *> m_sub_channel_map;
+    unsigned char m_stream_channel_id, m_size_byte1;
+    bool m_read_error_occurred, m_delete_myself_next, m_are_in_read_handler_loop;
+    enum {
+        AWAITING_DOLLAR,
+        AWAITING_STREAM_CHANNEL_ID,
+        AWAITING_SIZE1,
+        AWAITING_SIZE2,
+        AWAITING_PACKET_DATA
+    } m_tcp_reading_state;
+    unsigned short m_next_tcp_read_size;
+    int m_next_tcp_read_stream_socket_num;
+    unsigned char m_next_tcp_read_stream_channel_id;
+};
+
+class RtpInterface : public Udp {
+public:
+    RtpInterface(TaskScheduler *scheduler = NULL);
+    RtpInterface(TaskScheduler *scheduler, const AddressPort &remote);
+    RtpInterface(TaskScheduler *scheduler, const char *ip, const uint16_t port);
+    virtual ~RtpInterface();
+
+    void set_stream_socket(int sockfd, unsigned char stream_channel_id);
+    void remove_stream_socket(int sock_num, unsigned char stream_channel_id);
+
+    virtual int write(const uint8_t *buf, int size,
+                      struct sockaddr_in *remote = NULL);
+
+private:
+    int send_rtp_or_rtcp_packet_over_tcp(uint8_t *packet, unsigned packet_size,
+                                         int socket_num, unsigned char stream_channel_id);
+    int send_data_over_tcp(int socket_num,
+                           uint8_t *data, unsigned data_size);
+
+private:
+    TaskScheduler *m_scheduler;
+    std::vector<TcpStreamRecord *> m_tcp_stream_record;
+};
 
 class OutPacketBuffer {
 public:
@@ -802,8 +867,7 @@ public:
     void adjust_packet_start(unsigned num_bytes);
     void reset_packet_start();
     void reset_offset() { m_cur_offset = 0; }
-    void reset_overflow_data()
-    { m_overflow_data_offset = m_overflow_data_size = 0; }
+    void reset_overflow_data() { m_overflow_data_offset = m_overflow_data_size = 0; }
 
 private:
     unsigned m_packet_start, m_cur_offset, m_preferred, m_max, m_limit;
@@ -816,15 +880,27 @@ private:
 
 uint32_t random32();
 
+struct TcpStreamRecord {
+public:
+    TcpStreamRecord(int stream_socket_num, unsigned char stream_channel_id);
+    virtual ~TcpStreamRecord();
+
+public:
+    int m_stream_socket_num;
+    unsigned char m_stream_channel_id;
+};
+
 class MultiFramedRTPSink {
 public:
-    MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
-                       const char *rtp_payload_format_name, unsigned num_channels = 1);
+    MultiFramedRTPSink(TaskScheduler *scheduler, RtpInterface *interface,
+                       uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
+                       const char *rtp_payload_format_name,
+                       unsigned num_channels = 1);
     virtual ~MultiFramedRTPSink();
 
     typedef void (after_playing_func) (void *client_data);
-    bool start_playing(xutil::Queue<xmedia::Frame *> &queue_src, after_playing_func *after_func,
-                       void *after_client_data);
+    bool start_playing(xutil::Queue<xmedia::Frame *> &queue_src,
+                       after_playing_func *after_func, void *after_client_data);
     virtual void stop_playing();
     xutil::Queue<xmedia::Frame *> *queue_source() const { return m_queue_src; }
 
@@ -841,27 +917,28 @@ public:
     virtual char const *aux_sdp_line();
 
     uint16_t current_seq_num() const { return m_seq_num; }
-    uint32_t preset_next_timestamp();
 
     struct timeval const &creation_time() const { return m_creation_time; }
+    struct timeval const &initial_presentation_time() const { return m_initial_presentation_time; }
+    struct timeval const &most_recent_presentation_time() const { return m_most_recent_presentation_time; }
+    void reset_presentation_times();
 
-    void set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size);
+    void set_packet_sizes(unsigned preferred_packet_size, unsigned max_packet_size);
 
     typedef void (on_send_error_func)(void* client_data);
-    void set_on_send_error_func(on_send_error_func* on_send_error_func, void* on_send_error_func_data) {
+    void set_on_send_error_func(on_send_error_func* on_send_error_func,
+                                void* on_send_error_func_data) {
         m_on_send_error_func = on_send_error_func;
         m_on_send_error_data = on_send_error_func_data;
     }
 
-    void set_stream_socket(int sockfd, int stream_channel_id);
+    void set_stream_socket(int sockfd, unsigned char stream_channel_id);
 
 protected:
     virtual bool continue_playing();
 
     static void on_source_closure(void *client_data);
     void on_source_closure();
-
-    xutil::Queue<xmedia::Frame *> *m_queue_src;
 
     uint32_t ssrc() const { return m_ssrc; }
     uint32_t convert_to_rtp_timestamp(struct timeval tv);
@@ -899,10 +976,18 @@ private:
     void pack_frame();
     void send_packet_if_necessary();
     static void send_next(void *first_arg);
-    friend void send_next(void *);
+
+    static void after_getting_frame(void *client_data,
+                                    unsigned num_bytes_read, unsigned num_truncated_bytes,
+                                    struct timeval presentation_time, unsigned duration_in_microseconds);
+    void after_getting_frame1(unsigned frame_size, unsigned num_truncated_bytes,
+                              struct timeval presentation_time, unsigned duration_in_microseconds);
+    bool is_too_big_for_a_packet(unsigned num_bytes) const;
 
 protected:
-    Udp *m_udp;
+    TaskScheduler *m_scheduler;
+    xutil::Queue<xmedia::Frame *> *m_queue_src;
+    RtpInterface *m_interface;
     uint8_t m_rtp_payload_type;
     uint64_t m_current_timestamp;
     uint16_t m_seq_num;
@@ -915,14 +1000,12 @@ private:
 
     uint32_t m_ssrc, m_timestamp_base;
     uint32_t m_rtp_timestamp_frequency;
-    bool m_next_timestamp_has_been_preset;
     const char *m_rtp_payload_format_name;
     unsigned m_num_channels;
-    struct timeval m_creation_time;
+    struct timeval m_creation_time, m_initial_presentation_time, m_most_recent_presentation_time;
 
     OutPacketBuffer *m_out_buf;
 
-    bool m_no_frames_left;
     unsigned m_num_frames_used_so_far;
     unsigned m_cur_fragmentation_offset;
     bool m_previous_frame_ended_fragmentation;
@@ -939,28 +1022,53 @@ private:
 
     on_send_error_func* m_on_send_error_func;
     void* m_on_send_error_data;
+
+    TaskToken m_next_task;
 };
+
+typedef void (after_getting_func) (void *client_data,
+                                   unsigned frame_size, unsigned num_truncated_bytes,
+                                   struct timeval presentation_time, unsigned duration_in_microseconds);
 
 class H264Fragmenter {
 public:
-    H264Fragmenter(unsigned input_buffer_max, unsigned max_output_packet_size);
+    H264Fragmenter(xutil::Queue<xmedia::Frame *> *queue_src,
+                   unsigned input_buffer_max, unsigned max_output_packet_size);
     ~H264Fragmenter();
 
     bool last_fragment_completed_nal_unit() const { return m_last_fragment_completed_nal_unit; }
+    void get_next_frame(unsigned char *to, unsigned max_size, after_getting_func *func, void *data);
+    bool picture_end_marker() const;
+
+private:
+    void after_getting_frame1(unsigned frame_size, unsigned num_truncated_bytes,
+                              struct timeval presentation_time, unsigned duration_in_microseconds);
 
 private:
     DISALLOW_COPY_AND_ASSIGN(H264Fragmenter);
+    xutil::Queue<xmedia::Frame *> *m_queue_src;
     unsigned m_input_buffer_size;
     unsigned m_max_output_packet_size;
     unsigned char *m_input_buffer;
     unsigned m_num_valid_data_bytes;
     unsigned m_cur_data_offset;
     bool m_last_fragment_completed_nal_unit;
+    unsigned char *m_to;
+    unsigned m_max_size;
+    unsigned m_frame_size;
+    struct timeval m_presentation_time;
+    unsigned m_duration_in_microseconds;
+    VideoRawParser m_vparser;
+    unsigned m_nalu_index_in_parser;
+    xmedia::Frame *m_frame;
+    after_getting_func *m_after_getting_func;
+    void *m_after_getting_client_data;
+    int32_t m_prev_ts;
 };
 
 class H264VideoRTPSink : public MultiFramedRTPSink {
 public:
-    H264VideoRTPSink(Udp *udp, unsigned char rtp_payload_format,
+    H264VideoRTPSink(TaskScheduler *scheduler, RtpInterface *interface, unsigned char rtp_payload_format,
                      uint8_t const *sps = NULL, unsigned sps_size = 0,
                      uint8_t const *pps = NULL, unsigned pps_size = 0);
     virtual ~H264VideoRTPSink();
@@ -988,7 +1096,7 @@ private:
 
 class MPEG4GenericRTPSink : public MultiFramedRTPSink {
 public:
-    MPEG4GenericRTPSink(Udp *udp, unsigned char rtp_payload_format,
+    MPEG4GenericRTPSink(TaskScheduler *scheduler, RtpInterface *interface, unsigned char rtp_payload_format,
                         uint32_t rtp_timestamp_frequency,
                         char const *sdp_media_type_string,
                         char const *mpeg4_mode, char const *config_string,

@@ -7,8 +7,8 @@
 #include "rtsp_common.h"
 #include "media_pusher.h"
 
-#define XDEBUG
-#define XDEBUG_MESSAGE
+//#define XDEBUG
+//#define XDEBUG_RTSP_MESSAGE
 
 #define DEFAULT_USER_AGENT  "flvpusher (dengxiayehu@yeah.net)"
 
@@ -19,7 +19,9 @@ using namespace amf;
 
 namespace flvpusher {
 
-static TaskScheduler *g_scheduler = NULL;
+static unsigned const rtp_header_size = 12;
+
+static std::map<int, SocketDescriptor *> g_socket_table;
 
 std::string RtspUrl::to_string() const
 {
@@ -136,36 +138,32 @@ std::string Rtsp::field2string() const
     return str;
 }
 
-Rtcp::Rtcp(Udp *udp, const char *cname, MediaSubsession *subsess) :
-    m_udp(udp), m_subsess(subsess), m_type_of_event(EVENT_SDES),
-    m_on_expire_task(NULL)
+static void deregister_socket(int sock_num, unsigned char stream_channel_id)
 {
-    g_scheduler->turn_on_background_read_handling(m_udp->get_sockfd(),
+    if (g_socket_table.find(sock_num) != g_socket_table.end()) {
+        g_socket_table[sock_num]->deregister_interface(stream_channel_id);
+    }
+}
+
+Rtcp::Rtcp(TaskScheduler *scheduler, RtpInterface *interface, const char *cname, MediaSubsession *subsess) :
+    m_interface(interface), m_subsess(subsess), m_type_of_event(EVENT_SDES),
+    m_on_expire_task(NULL),
+    m_scheduler(scheduler)
+{
+    m_scheduler->turn_on_background_read_handling(m_interface->get_sockfd(),
             (TaskScheduler::BackgroundHandlerProc *) &Rtcp::network_read_handler, this);
 
     on_expire1();
 }
 
-Rtcp::Rtcp(Udp *udp, MultiFramedRTPSink *sink, MultiFramedRTPSource *source) :
-    m_udp(udp), m_subsess(NULL), m_type_of_event(EVENT_SDES),
-    m_on_expire_task(NULL),
-    m_sink(sink), m_source(source)
-{
-}
-
 Rtcp::~Rtcp()
 {
-    if (m_on_expire_task) {
-        g_scheduler->unschedule_delayed_task(m_on_expire_task);
-    }
+    m_scheduler->unschedule_delayed_task(m_on_expire_task);
 }
 
-void Rtcp::set_stream_socket(int sockfd, int stream_channel_id)
+void Rtcp::set_stream_socket(int sockfd, unsigned char stream_channel_id)
 {
-    if (sockfd < 0) return;
-
-    UNUSED(stream_channel_id);
-    m_udp->set_sockfd(sockfd);
+    m_interface->set_stream_socket(sockfd, stream_channel_id);
 }
 
 void Rtcp::network_read_handler(Rtcp *source, int mask)
@@ -213,7 +211,7 @@ void Rtcp::network_read_handler1(int mask)
     uint8_t buf[MaxRTCPPacketSize];
     int nread;
 
-    if ((nread = m_udp->read(buf, sizeof(buf))) < 0) {
+    if ((nread = m_interface->read(buf, sizeof(buf))) < 0) {
         LOGE("Read RTCP packet failed");
         return;
     }
@@ -382,12 +380,14 @@ void Rtcp::on_expire1()
 {
     enum {RTCP_MAX_INTERVAL = 5};
     unsigned u_seconds_to_delay = (rand()%RTCP_MAX_INTERVAL + 1)*MILLION;
-    m_on_expire_task = g_scheduler->schedule_delayed_task(
+    m_on_expire_task = m_scheduler->schedule_delayed_task(
             u_seconds_to_delay, on_expire, this);
 }
 
 void Rtcp::send_sdes()
 {
+    if (!m_subsess) return;
+
     memset(m_peer_sdes_buf, 0, sizeof(m_peer_sdes_buf));
 
     RtcpCommon *common = (RtcpCommon *) m_peer_sdes_buf;
@@ -408,17 +408,20 @@ void Rtcp::send_sdes()
 
     common->length = EHTONS((p-psave+4+4+3)/4-1);   // Length
 
-    if (m_udp->write((uint8_t *) m_peer_sdes_buf, (ENTOHS(common->length)+1)*4) < 0) {
+    if (m_interface->write((uint8_t *) m_peer_sdes_buf, (ENTOHS(common->length)+1)*4) < 0) {
         LOGE("Send RTCP SDES to server failed");
         // Fall through
     }
 }
 
-MultiFramedRTPSource::MultiFramedRTPSource(Udp *udp,
+MultiFramedRTPSource::MultiFramedRTPSource(
+        TaskScheduler *scheduler,
+        RtpInterface *interface,
         unsigned char rtp_payload_format,
         unsigned rtp_timestamp_frequency,
         void *opaque) :
-    m_udp(udp),
+    m_scheduler(scheduler),
+    m_interface(interface),
     m_rtp_payload_format(rtp_payload_format),
     m_rtp_timestamp_frequency(rtp_timestamp_frequency),
     m_are_doing_network_reads(false),
@@ -445,7 +448,7 @@ int MultiFramedRTPSource::start_receiving()
     }
 
     m_are_doing_network_reads = true;
-    g_scheduler->turn_on_background_read_handling(m_udp->get_sockfd(),
+    m_scheduler->turn_on_background_read_handling(m_interface->get_sockfd(),
             (TaskScheduler::BackgroundHandlerProc *) &MultiFramedRTPSource::network_read_handler, this);
     return 0;
 }
@@ -458,7 +461,7 @@ void MultiFramedRTPSource::network_read_handler(MultiFramedRTPSource *source, in
 void MultiFramedRTPSource::network_read_handler1(int mask)
 {
     uint8_t buf[MTU];
-    int nread = m_udp->read(buf, sizeof(buf));
+    int nread = m_interface->read(buf, sizeof(buf));
     if (nread < 0) {
         LOGE("Failed to receive RTP data");
         return;
@@ -612,10 +615,14 @@ SPropRecord *parse_s_prop_parm_str(const char *parm_str, unsigned &num_s_prop_re
     return result_array;
 }
 
-H264VideoRTPSource::H264VideoRTPSource(Udp *udp,
-        unsigned char rtp_payload_format, unsigned rtp_timestamp_frequency,
-        const char *s_prop_parm_str, void *opaque) :
-    MultiFramedRTPSource(udp, rtp_payload_format, rtp_timestamp_frequency, opaque),
+H264VideoRTPSource::H264VideoRTPSource(
+        TaskScheduler *scheduler,
+        RtpInterface *interface,
+        unsigned char rtp_payload_format,
+        unsigned rtp_timestamp_frequency,
+        const char *s_prop_parm_str,
+        void *opaque) :
+    MultiFramedRTPSource(scheduler, interface, rtp_payload_format, rtp_timestamp_frequency, opaque),
     m_sps(NULL), m_sps_size(0), m_pps(NULL), m_pps_size(0)
 {
     unsigned num_s_prop_records;
@@ -735,16 +742,19 @@ int H264VideoRTPSource::on_complete_frame1(FrameBuffer *frame)
     return 0;
 }
 
-MPEG4GenericRTPSource::MPEG4GenericRTPSource(Udp *udp,
+MPEG4GenericRTPSource::MPEG4GenericRTPSource(
+        TaskScheduler *scheduler,
+        RtpInterface *interface,
         unsigned char rtp_payload_format,
         unsigned rtp_timestamp_frequency,
         const char *medium_name,
         const char *mode,
-        unsigned size_length, unsigned index_length,
+        unsigned size_length,
+        unsigned index_length,
         unsigned index_delta_length,
         const char *fmtp_config,
         void *opaque) :
-    MultiFramedRTPSource(udp, rtp_payload_format, rtp_timestamp_frequency, opaque),
+    MultiFramedRTPSource(scheduler, interface, rtp_payload_format, rtp_timestamp_frequency, opaque),
     m_size_length(size_length), m_index_length(index_length),
     m_index_delta_length(index_delta_length),
     m_num_au_headers(0), m_next_au_header(0), m_au_headers(NULL)
@@ -1335,9 +1345,7 @@ RtspClient::RtspClient(void *opaque) :
     m_opaque(opaque),
     m_tcp_stream_id_count(0)
 {
-    if (!g_scheduler) {
-        g_scheduler = new TaskScheduler;
-    }
+    m_scheduler = new TaskScheduler;
 }
 
 RtspClient::~RtspClient()
@@ -1345,9 +1353,9 @@ RtspClient::~RtspClient()
     SAFE_FREE(m_base_url);
     SAFE_FREE(m_last_session_id);
     SAFE_DELETE(m_sess);
-    g_scheduler->unschedule_delayed_task(m_liveness_command_task);
-    g_scheduler->unschedule_delayed_task(m_stream_timer_task);
-    SAFE_DELETE(g_scheduler);
+    m_scheduler->unschedule_delayed_task(m_liveness_command_task);
+    m_scheduler->unschedule_delayed_task(m_stream_timer_task);
+    SAFE_DELETE(m_scheduler);
 }
 
 void RtspClient::close()
@@ -1379,7 +1387,7 @@ int RtspClient::open(const std::string &url,
         return -1;
 
     LOGI("Connected to rtsp server: %s successfully",
-            STR(_url.srvap.to_string()));
+         STR(_url.srvap.to_string()));
 
     m_stat = StateConnected;
     return 0;
@@ -1441,7 +1449,7 @@ int RtspClient::send_request(const char *cmd_url, const std::string &request, co
             STR(m_user_agent_str),
             STR(field2string()),
             STR(content)));
-#ifdef XDEBUG_MESSAGE
+#ifdef XDEBUG_RTSP_MESSAGE
     LOGD("Sent rtsp request:[%s]", STR(str));
 #endif
     m_fields.clear();
@@ -1474,7 +1482,7 @@ int RtspClient::recv_response(ResponseInfo *pri)
         }
     }
 
-#ifdef XDEBUG_MESSAGE
+#ifdef XDEBUG_RTSP_MESSAGE
     LOGD("Recvd rtsp response:[%s]", m_rrb.buf);
 #endif
 
@@ -1539,7 +1547,7 @@ int RtspClient::recv_response(ResponseInfo *pri)
             break;
         }
 
-#ifdef XDEBUG_MESSAGE
+#ifdef XDEBUG_RTSP_MESSAGE
         LOGD("response_code: %u, response_str:%s, session_parm_str:%s, transport_parm_str:%s, scale_parm_str:%s, range_parm_str:%s, rtp_info_parm_str:%s, public_parm_str:%s, content_base_parm_str:%s, content_type_parm_str:%s",
                 pri->response_code, pri->response_str, pri->session_parm_str, pri->transport_parm_str, pri->scale_parm_str, pri->range_parm_str, pri->rtp_info_parm_str, pri->public_parm_str, pri->content_base_parm_str, pri->content_type_parm_str);
 #endif
@@ -1679,7 +1687,7 @@ char *RtspClient::create_blocksize_string(bool stream_using_tcp)
 }
 
 string RtspClient::generate_cmd_url(const char *base_url,
-        MediaSession *session, MediaSubsession *subsession)
+                                    MediaSession *session, MediaSubsession *subsession)
 {
     if (subsession) {
         const char *prefix, *separator, *suffix;
@@ -1694,22 +1702,22 @@ string RtspClient::generate_cmd_url(const char *base_url,
 
 int RtspClient::request_setup(const std::string &sdp, bool stream_outgoing, bool stream_using_tcp)
 {
-    m_sess = MediaSession::create_new(STR(sdp), m_opaque);
+    m_sess = MediaSession::create_new(this, STR(sdp), m_opaque);
     if (!m_sess) {
         LOGE("Create MediaSession failed");
         return -1;
     }
-    return m_sess->setup_subsessions(this, stream_outgoing, stream_using_tcp);
+    return m_sess->setup_subsessions(stream_outgoing, stream_using_tcp);
 }
 
 int RtspClient::request_play()
 {
-    if (m_sess->play_subsessions(this) == 0) {
+    if (m_sess->play_subsessions() == 0) {
         if (m_duration > 0) {
             const unsigned delay_slop = 2;
             m_duration += delay_slop;
             unsigned u_secs_to_delay = m_duration*MILLION;
-            m_stream_timer_task = g_scheduler->schedule_delayed_task(
+            m_stream_timer_task = m_scheduler->schedule_delayed_task(
                     u_secs_to_delay, (TaskFunc *) stream_timer_handler, this);
         }
         LOGI("Started playing session (for up to %.3lf seconds) ...",
@@ -2042,7 +2050,7 @@ const char *RtspClient::session_url(MediaSession const &session) const
 
 int RtspClient::loop(volatile bool *watch_variable)
 {
-    return g_scheduler->do_event_loop(watch_variable);
+    return m_scheduler->do_event_loop(watch_variable);
 }
 
 void RtspClient::schedule_liveness_command()
@@ -2066,8 +2074,8 @@ void RtspClient::schedule_liveness_command()
 #endif
 
     if (m_liveness_command_task)
-        g_scheduler->unschedule_delayed_task(m_liveness_command_task);
-    m_liveness_command_task = g_scheduler->schedule_delayed_task(
+        m_scheduler->unschedule_delayed_task(m_liveness_command_task);
+    m_liveness_command_task = m_scheduler->schedule_delayed_task(
             u_seconds_to_delay, send_liveness_command, this);
 }
 
@@ -2105,7 +2113,7 @@ void RtspClient::shutdown_stream(RtspClient *rtsp_client)
     if (rtsp_client->request_teardown() < 0) {
         LOGE("Failed to send TEARDOWN command (cont)");
     }
-    g_scheduler->ask2quit();
+    rtsp_client->m_scheduler->ask2quit();
 }
 
 bool RtspClient::rtsp_option_is_supported(const char *command_name,
@@ -2142,7 +2150,8 @@ SDPAttribute::~SDPAttribute() {
     SAFE_FREE(m_str_value_to_lower);
 }
 
-MediaSession::MediaSession(void *opaque) :
+MediaSession::MediaSession(RtspClient *rtsp_client, void *opaque) :
+    m_client(rtsp_client),
     m_sess_name(NULL),
     m_sess_desc(NULL),
     m_conn_endpoint_name(NULL),
@@ -2455,9 +2464,9 @@ int MediaSession::parse_sdp_attr_source_filter(const char *sdp_line)
     return parse_source_filter_attr(sdp_line, m_source_filter_name);
 }
 
-MediaSession *MediaSession::create_new(const char *sdp, void *opaque)
+MediaSession *MediaSession::create_new(RtspClient *rtsp_client, const char *sdp, void *opaque)
 {
-    MediaSession *new_session = new MediaSession(opaque);
+    MediaSession *new_session = new MediaSession(rtsp_client, opaque);
     if (new_session) {
         if (new_session->initialize_with_sdp(sdp) < 0) {
             SAFE_DELETE(new_session);
@@ -2467,10 +2476,10 @@ MediaSession *MediaSession::create_new(const char *sdp, void *opaque)
     return new_session;
 }
 
-int MediaSession::setup_subsessions(RtspClient *rtsp_client, bool stream_outgoing, bool stream_using_tcp)
+int MediaSession::setup_subsessions(bool stream_outgoing, bool stream_using_tcp)
 {
     AddressPort ap;
-    if (get_local_address_from_sockfd(rtsp_client->get_sockfd(), ap) < 0)
+    if (get_local_address_from_sockfd(m_client->get_sockfd(), ap) < 0)
         return -1;
 
     FOR_VECTOR_ITERATOR(MediaSubsession *, m_subsessions, it) {
@@ -2487,20 +2496,20 @@ int MediaSession::setup_subsessions(RtspClient *rtsp_client, bool stream_outgoin
                     (*it)->medium_name(), (*it)->codec_name(), (*it)->client_port_num(), (*it)->client_port_num()+1);
         }
         
-        rtsp_client->request_setup(*(*it), stream_outgoing, stream_using_tcp);
+        m_client->request_setup(*(*it), stream_outgoing, stream_using_tcp);
     }
     return 0;
 }
 
-int MediaSession::play_subsessions(RtspClient *rtsp_client)
+int MediaSession::play_subsessions()
 {
     if (abs_start_time()) {
         LOGE("The stream is indexed by 'absolute' time: %s, not supported",
                 abs_start_time());
         return -1;
     } else {
-        rtsp_client->duration() = play_end_time() - play_start_time();
-        return rtsp_client->request_play(*this);
+        m_client->duration() = play_end_time() - play_start_time();
+        return m_client->request_play(*this);
     }
 }
 
@@ -2810,6 +2819,7 @@ int MediaSubsession::initiate(const std::string &own_ip)
             break;
         }
 
+        TaskScheduler *scheduler = parent_session().rtsp_client()->scheduler();
         AddressPort ap;
         struct in_addr temp_addr;
         temp_addr.s_addr = connection_endpoint_address();
@@ -2820,7 +2830,8 @@ int MediaSubsession::initiate(const std::string &own_ip)
                 m_client_port_num = m_client_port_num&~1;
 
             ap.set_address_port(STR(own_ip), m_client_port_num);
-            m_rtp_socket = new Udp(connection_endpoint_name(), server_port_num());
+            m_rtp_socket = new RtpInterface(scheduler,
+                                            connection_endpoint_name(), server_port_num());
             if (m_rtp_socket->open(ap) < 0) {
                 LOGE("Failed to create RTP socket");
                 break;
@@ -2831,7 +2842,8 @@ int MediaSubsession::initiate(const std::string &own_ip)
                     m_rtcp_socket = m_rtp_socket;
                 else {
                     const PortNumBits rtcp_port_num = m_client_port_num|1;
-                    m_rtcp_socket = new Udp(connection_endpoint_name(), server_port_num()+1);
+                    m_rtcp_socket = new RtpInterface(scheduler,
+                                                     connection_endpoint_name(), server_port_num()+1);
                     ap.set_address_port(STR(own_ip), rtcp_port_num);
                     m_rtcp_socket->open(ap);
                 }
@@ -2839,7 +2851,8 @@ int MediaSubsession::initiate(const std::string &own_ip)
         } else {
             bool success = false;
             for ( ; ; ) {
-                m_rtp_socket = new Udp(connection_endpoint_name(), server_port_num());
+                m_rtp_socket = new RtpInterface(scheduler,
+                                                connection_endpoint_name(), server_port_num());
                 ap.set_address_port(STR(own_ip), 0);
                 if (m_rtp_socket->open(ap) < 0) {
                     LOGE("Unable to create RTP socket");
@@ -2859,7 +2872,8 @@ int MediaSubsession::initiate(const std::string &own_ip)
                 }
 
                 PortNumBits rtcp_port_num = m_client_port_num|1;
-                m_rtcp_socket = new Udp(connection_endpoint_name(), server_port_num()+1);
+                m_rtcp_socket = new RtpInterface(scheduler,
+                                                 connection_endpoint_name(), server_port_num()+1);
                 ap.set_address_port(STR(own_ip), rtcp_port_num);
                 if (m_rtcp_socket->open(ap) < 0) {
                     SAFE_DELETE(m_rtcp_socket); SAFE_DELETE(m_rtp_socket);
@@ -2885,7 +2899,8 @@ int MediaSubsession::initiate(const std::string &own_ip)
         }
 
         if (m_rtcp_socket) {
-            m_rtcp = new Rtcp(m_rtcp_socket, m_parent.CNAME(), this);
+            m_rtcp = new Rtcp(parent_session().rtsp_client()->scheduler(),
+                              m_rtcp_socket, m_parent.CNAME(), this);
             if (!m_rtcp) {
                 LOGE("Failed to create RTCP instance");
                 break;
@@ -2968,14 +2983,18 @@ int MediaSubsession::create_source_object()
             break;
         } else {
             if (!strcmp(m_codec_name, "H264")) {
-                m_rtp_source = new H264VideoRTPSource(m_rtp_socket,
+                m_rtp_source = new H264VideoRTPSource(
+                        parent_session().rtsp_client()->scheduler(),
+                        m_rtp_socket,
                         m_rtp_payload_format, m_rtp_timestamp_frequency,
                         attr_val_str("sprop-parameter-sets"),
                         parent_session().opaque());
             } else if (!strcmp(m_codec_name, "MPEG4-GENERIC")) {
                 const char *fmtp_config = attr_val_str("config");
                 if (!strlen(fmtp_config)) fmtp_config = attr_val_str("configuration");
-                m_rtp_source = new MPEG4GenericRTPSource(m_rtp_socket,
+                m_rtp_source = new MPEG4GenericRTPSource(
+                        parent_session().rtsp_client()->scheduler(),
+                        m_rtp_socket,
                         m_rtp_payload_format, m_rtp_timestamp_frequency,
                         m_medium_name, attr_val_str2lower("mode"),
                         attr_val_unsigned("sizelength"),
@@ -2996,17 +3015,308 @@ int MediaSubsession::create_source_object()
 
 void MediaSubsession::close()
 {
-    if (m_rtp_socket && m_rtp_socket->get_sockfd() != -1)
-        g_scheduler->turn_off_background_read_handling(
-                m_rtp_socket->get_sockfd());
-    if (m_rtcp_socket && m_rtcp_socket->get_sockfd() != -1)
-        g_scheduler->turn_off_background_read_handling(
-                m_rtcp_socket->get_sockfd());
+    TaskScheduler *scheduler = parent_session().rtsp_client()->scheduler();
+    if (m_rtp_socket && m_rtp_socket->get_sockfd() != -1) {
+        scheduler->turn_off_background_read_handling(m_rtp_socket->get_sockfd());
+    }
+    if (m_rtcp_socket && m_rtcp_socket->get_sockfd() != -1) {
+        scheduler->turn_off_background_read_handling(m_rtcp_socket->get_sockfd());
+    }
 }
 
 /////////////////////////////////////////////////////////////
 
-unsigned OutPacketBuffer::max_size = 60000;
+static void remove_socket_descriptor(int sock_num)
+{
+    if (g_socket_table.find(sock_num) != g_socket_table.end()) {
+        g_socket_table.erase(sock_num);
+    }
+}
+
+SocketDescriptor::SocketDescriptor(TaskScheduler *scheduler, int socket_num) :
+    m_scheduler(scheduler), m_our_socket_num(socket_num),
+    m_read_error_occurred(false), m_delete_myself_next(false), m_are_in_read_handler_loop(false),
+    m_tcp_reading_state(AWAITING_DOLLAR),
+    m_next_tcp_read_size(0), m_next_tcp_read_stream_socket_num(-1), m_next_tcp_read_stream_channel_id(0xFF)
+{
+}
+
+SocketDescriptor::~SocketDescriptor()
+{
+    m_scheduler->turn_off_background_read_handling(m_our_socket_num);
+    remove_socket_descriptor(m_our_socket_num);
+
+    FOR_MAP(m_sub_channel_map, unsigned char, void *, it) {
+        unsigned char stream_channel_id = MAP_KEY(it);
+        RtpInterface *rtp_interface = (RtpInterface *) MAP_VAL(it);
+
+        rtp_interface->remove_stream_socket(m_our_socket_num, stream_channel_id);
+    }
+}
+
+void SocketDescriptor::register_interface(unsigned char stream_channel_id, void *interface)
+{
+    bool is_first_registration = m_sub_channel_map.empty();
+    m_sub_channel_map.insert(pair<unsigned char, void *>(stream_channel_id, interface));
+
+    if (is_first_registration) {
+        m_scheduler->turn_on_background_read_handling(m_our_socket_num,
+                                                      (TaskScheduler::BackgroundHandlerProc *) &tcp_read_handler,
+                                                      this);
+    }
+}
+
+void SocketDescriptor::tcp_read_handler(SocketDescriptor *socket_descriptor, int mask)
+{
+    // Call the read handler until it returns false, with a limit to avoid starving other sockets
+    unsigned count = 2000;
+    socket_descriptor->m_are_in_read_handler_loop = true;
+    while (!socket_descriptor->m_delete_myself_next &&
+           socket_descriptor->tcp_read_handler1(mask) &&
+           --count > 0) {
+    }
+    socket_descriptor->m_are_in_read_handler_loop = false;
+    if (socket_descriptor->m_delete_myself_next) {
+        delete socket_descriptor;
+    }
+}
+
+bool SocketDescriptor::tcp_read_handler1(int mask)
+{
+    uint8_t c;
+    if (m_tcp_reading_state != AWAITING_PACKET_DATA) {
+        int result = recv(m_our_socket_num, &c, 1, MSG_NOSIGNAL);
+        if (!result) {
+            return false;
+        } else if (result != 1) {
+            m_read_error_occurred = true;
+            m_delete_myself_next = true;
+            return false;
+        }
+    }
+
+    bool call_again = true;
+    switch (m_tcp_reading_state) {
+    case AWAITING_DOLLAR:
+        if (c == '$') {
+            m_tcp_reading_state = AWAITING_STREAM_CHANNEL_ID;
+        } else {
+            // This character is part of a RTSP request or command, ignore it
+        }
+        break;
+
+    case AWAITING_STREAM_CHANNEL_ID:
+        if (lookup_interface(c) != NULL) {
+            m_stream_channel_id = c;
+            m_tcp_reading_state = AWAITING_SIZE1;
+        } else {
+            // This wasn't a stream channel id that we expected.  We're (somehow) in a strange state.  Try to recover:
+            LOGW("SocketDescriptor(socket %d)::tcp_read_handler1(): Saw nonexistent stream channel id: 0x%02x\n",
+                 m_our_socket_num, c);
+            m_tcp_reading_state = AWAITING_DOLLAR;
+        }
+        break;
+
+    case AWAITING_SIZE1:
+        // The byte that we read is the first (high) byte of the 16-bit RTP or RTCP packet 'size'.
+        m_size_byte1 = c;
+        m_tcp_reading_state = AWAITING_SIZE2;
+        break;
+
+    case AWAITING_SIZE2: {
+        // The byte that we read is the second (low) byte of the 16-bit RTP or RTCP packet 'size'.
+        unsigned short size = (m_size_byte1<<8)|c;
+
+        // Record the information about the packet data that will be read next:
+        RtpInterface *rtp_interface = (RtpInterface *) lookup_interface(m_stream_channel_id); 
+        if (rtp_interface) {
+            m_next_tcp_read_size = size;
+            m_next_tcp_read_stream_socket_num = m_our_socket_num;
+            m_next_tcp_read_stream_channel_id = m_stream_channel_id;
+        }
+        m_tcp_reading_state = AWAITING_PACKET_DATA;
+        } break;
+
+    case AWAITING_PACKET_DATA: {
+        call_again = false;
+        m_tcp_reading_state = AWAITING_DOLLAR;
+        RtpInterface *rtp_interface = (RtpInterface *) lookup_interface(m_stream_channel_id); 
+        if (rtp_interface) {
+            if (m_next_tcp_read_size == 0) {
+                // We've already read all the data for this packet
+                break;
+            }
+            LOGW("No handler proc for \"rtp_interface\" for channel %d; need to skip %d remaining bytes\n",
+                 m_our_socket_num, m_stream_channel_id, m_next_tcp_read_size);
+            int result = recv(m_our_socket_num, &c, 1, MSG_NOSIGNAL);
+            if (result < 0) { // error reading TCP socket, so we will no longer handle it
+                m_read_error_occurred = true;
+                m_delete_myself_next = true;
+                return false;
+            } else {
+                m_tcp_reading_state = AWAITING_PACKET_DATA;
+                if (result == 1) {
+                    --m_next_tcp_read_size;
+                    call_again = true;
+                }
+            }
+        } else {
+            LOGW("No \"rtp_interface\" for channel %d\n",
+                 m_our_socket_num, m_stream_channel_id);
+        }
+        } break;
+    }
+    return call_again;
+}
+
+void *SocketDescriptor::lookup_interface(unsigned char stream_channel_id)
+{
+    if (m_sub_channel_map.find(stream_channel_id) != m_sub_channel_map.end())
+        return m_sub_channel_map[stream_channel_id];
+    return NULL;
+}
+
+void SocketDescriptor::deregister_interface(unsigned char stream_channel_id)
+{
+    if (m_sub_channel_map.find(stream_channel_id) != m_sub_channel_map.end()) {
+        m_sub_channel_map.erase(stream_channel_id);
+    }
+
+    if (m_sub_channel_map.empty() ||
+        stream_channel_id == 0xFF) {
+        if (m_are_in_read_handler_loop) {
+            m_delete_myself_next = true; // we can't delete ourself yet, but we'll do so from "tcp_read_handler()"
+        } else {
+            delete this;
+        }
+    }
+}
+    
+/////////////////////////////////////////////////////////////
+
+RtpInterface::RtpInterface(TaskScheduler *scheduler) :
+    m_scheduler(scheduler)
+{
+}
+
+RtpInterface::RtpInterface(TaskScheduler *scheduler, const AddressPort &remote) :
+    Udp(remote), m_scheduler(scheduler)
+{
+}
+
+RtpInterface::RtpInterface(TaskScheduler *scheduler, const char *ip, const uint16_t port) :
+    Udp(ip, port), m_scheduler(scheduler)
+{
+}
+
+RtpInterface::~RtpInterface()
+{
+    FOR_VECTOR_ITERATOR(TcpStreamRecord *, m_tcp_stream_record, it) {
+        deregister_socket((*it)->m_stream_socket_num, (*it)->m_stream_channel_id);
+        SAFE_DELETE(*it);
+    }
+    m_tcp_stream_record.clear();
+}
+
+void RtpInterface::set_stream_socket(int sockfd, unsigned char stream_channel_id)
+{
+    if (sockfd < 0) return;
+
+    m_scheduler->turn_off_background_read_handling(get_sockfd());
+    ::close(get_sockfd());
+    set_sockfd(-1);
+
+    FOR_VECTOR_CONST_ITERATOR(TcpStreamRecord *, m_tcp_stream_record, it) {
+        if ((*it)->m_stream_socket_num == sockfd &&
+            (*it)->m_stream_channel_id == stream_channel_id) {
+            LOGW("sockfd(%d) with stream_channel_id(%d) already registered",
+                 sockfd, stream_channel_id);
+            return;
+        }
+    }
+
+    TcpStreamRecord *record = new TcpStreamRecord(sockfd, stream_channel_id);
+    m_tcp_stream_record.push_back(record);
+
+    SocketDescriptor *socket_descriptor = NULL;
+    if (g_socket_table.find(sockfd) == g_socket_table.end()) {
+        socket_descriptor = new SocketDescriptor(m_scheduler, sockfd);
+        g_socket_table.insert(pair<int, SocketDescriptor *>(sockfd, socket_descriptor));
+    } else {
+        socket_descriptor = g_socket_table[sockfd];
+    }
+    socket_descriptor->register_interface(stream_channel_id, this);
+}
+
+void RtpInterface::remove_stream_socket(int sock_num, unsigned char stream_channel_id)
+{
+    for (vector<TcpStreamRecord *>::iterator it = m_tcp_stream_record.begin();
+         it != m_tcp_stream_record.end();
+         ) {
+        if ((*it)->m_stream_socket_num == sock_num &&
+            (stream_channel_id == 0xFF || (*it)->m_stream_channel_id == stream_channel_id)) {
+            SAFE_DELETE(*it);
+            m_tcp_stream_record.erase(it++);
+
+            deregister_socket(sock_num, stream_channel_id);
+
+            if (stream_channel_id != 0xFF) return;
+        } else {
+            it++;
+        }
+    }
+}
+
+int RtpInterface::write(const uint8_t *buf, int size, struct sockaddr_in *remote)
+{
+    if (get_sockfd() != -1) {
+        return Udp::write(buf, size, remote);
+    }
+
+    int ret = 0;
+    FOR_VECTOR_CONST_ITERATOR(TcpStreamRecord *, m_tcp_stream_record, it) {
+        if (send_rtp_or_rtcp_packet_over_tcp((uint8_t *) buf, size,
+                                             (*it)->m_stream_socket_num, (*it)->m_stream_channel_id) < 0)
+            ret = -1;
+    }
+    return ret;
+} 
+
+int RtpInterface::send_rtp_or_rtcp_packet_over_tcp(uint8_t *packet, unsigned packet_size,
+                                                   int socket_num, unsigned char stream_channel_id)
+{
+#ifdef XDEBUG
+    LOGD("%d bytes over channel %d (socket %d)",
+         packet_size, stream_channel_id, socket_num);
+#endif
+
+    uint8_t framing_header[4];
+    framing_header[0] = '$';
+    framing_header[1] = stream_channel_id;
+    framing_header[2] = (uint8_t) ((packet_size&0xFF00)>>8);
+    framing_header[3] = (uint8_t) (packet_size&0xFF);
+
+    if (!send_data_over_tcp(socket_num, framing_header, 4) &&
+        !send_data_over_tcp(socket_num, packet, packet_size))
+        return 0;
+
+    return -1;
+}
+
+int RtpInterface::send_data_over_tcp(int socket_num,
+                                     uint8_t *data, unsigned data_size)
+{
+    if (::send(socket_num, data, data_size, MSG_NOSIGNAL) < 0) {
+        LOGE("Write data to network failed");
+        remove_stream_socket(socket_num, 0xFF);
+        return -1;
+    }
+    return 0;
+}
+
+/////////////////////////////////////////////////////////////
+
+unsigned OutPacketBuffer::max_size = 150000;
 
 OutPacketBuffer::OutPacketBuffer(unsigned preferred_packet_size, unsigned max_packet_size, unsigned max_buffer_size) :
     m_preferred(preferred_packet_size), m_max(max_packet_size),
@@ -3029,7 +3339,7 @@ void OutPacketBuffer::enqueue(unsigned char const *from, unsigned num_bytes)
 {
     if (num_bytes > total_bytes_available()) {
 #ifdef XDEBUG
-        LOGD("OutPacketBuffer::enqueue() warning: %d > %d",
+        LOGW("OutPacketBuffer::enqueue() warning: %d > %d",
              num_bytes, total_bytes_available());
 #endif
         num_bytes = total_bytes_available();
@@ -3144,31 +3454,54 @@ uint32_t random32()
     return (r16_1<<8) | (r16_2>>8);
 }
 
-MultiFramedRTPSink::MultiFramedRTPSink(Udp *udp, uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
-                                       const char *rtp_payload_format_name, unsigned num_channels) :
+TcpStreamRecord::TcpStreamRecord(int stream_socket_num, unsigned char stream_channel_id) :
+    m_stream_socket_num(stream_socket_num), m_stream_channel_id(stream_channel_id)
+{
+}
+
+TcpStreamRecord::~TcpStreamRecord()
+{
+}
+    
+/////////////////////////////////////////////////////////////
+
+MultiFramedRTPSink::MultiFramedRTPSink(TaskScheduler *scheduler,
+                                       RtpInterface *interface,
+                                       uint8_t rtp_payload_type, uint32_t rtp_timestamp_frequency,
+                                       const char *rtp_payload_format_name,
+                                       unsigned num_channels) :
+    m_scheduler(scheduler),
     m_queue_src(NULL),
-    m_udp(udp),
+    m_interface(interface),
     m_rtp_payload_type(rtp_payload_type),
     m_rtp_timestamp_frequency(rtp_timestamp_frequency),
-    m_next_timestamp_has_been_preset(false),
     m_rtp_payload_format_name(strdup_(rtp_payload_format_name)),
     m_num_channels(num_channels),
     m_out_buf(NULL), m_cur_fragmentation_offset(0), m_previous_frame_ended_fragmentation(false),
-    m_on_send_error_func(NULL), m_on_send_error_data(NULL)
+    m_on_send_error_func(NULL), m_on_send_error_data(NULL),
+    m_next_task(NULL)
 {
     m_seq_num = rand();
     m_ssrc = random32();
     m_timestamp_base = random32();
     gettimeofday(&m_creation_time, NULL);
+    reset_presentation_times();
+
+    // Default max packet size (1500, minus allowance for IP, UDP, UMTP headers)
+    // (Also, make it a multiple of 4 bytes, just in case that matters.)
+    set_packet_sizes(1000, 1456);
 }
 
 MultiFramedRTPSink::~MultiFramedRTPSink()
 {
     SAFE_DELETE(m_out_buf);
     free((char *) m_rtp_payload_format_name);
+    if (m_next_task) {
+        m_scheduler->unschedule_delayed_task(m_next_task);
+    }
 }
 
-void MultiFramedRTPSink::set_packet_size(unsigned preferred_packet_size, unsigned max_packet_size)
+void MultiFramedRTPSink::set_packet_sizes(unsigned preferred_packet_size, unsigned max_packet_size)
 {
     if (preferred_packet_size > max_packet_size ||
         preferred_packet_size == 0) {
@@ -3182,16 +3515,13 @@ void MultiFramedRTPSink::set_packet_size(unsigned preferred_packet_size, unsigne
     m_our_max_packet_size = max_packet_size;
 }
 
-void MultiFramedRTPSink::set_stream_socket(int sockfd, int stream_channel_id)
+void MultiFramedRTPSink::set_stream_socket(int sockfd, unsigned char stream_channel_id)
 {
-    if (sockfd < 0) return;
-
-    UNUSED(stream_channel_id);
-    m_udp->set_sockfd(sockfd);
+    m_interface->set_stream_socket(sockfd, stream_channel_id);
 }
 
-bool MultiFramedRTPSink::start_playing(Queue<Frame *> &queue_src, after_playing_func *after_func,
-                                       void *after_client_data)
+bool MultiFramedRTPSink::start_playing(Queue<Frame *> &queue_src,
+                                       after_playing_func *after_func, void *after_client_data)
 {
     if (m_queue_src) {
         LOGE("This sink is already beging played");
@@ -3269,11 +3599,6 @@ uint32_t MultiFramedRTPSink::convert_to_rtp_timestamp(struct timeval tv)
     uint32_t timestamp_increment = m_rtp_timestamp_frequency*tv.tv_sec;
     timestamp_increment += (uint32_t) (m_rtp_timestamp_frequency*(tv.tv_usec/1000000.0) + 0.5);
 
-    if (m_next_timestamp_has_been_preset) {
-        m_timestamp_base -= timestamp_increment;
-        m_next_timestamp_has_been_preset = false;
-    }
-
     uint32_t const rtp_timestamp = m_timestamp_base + timestamp_increment;
 
 #ifdef XDEBUG
@@ -3284,38 +3609,34 @@ uint32_t MultiFramedRTPSink::convert_to_rtp_timestamp(struct timeval tv)
     return rtp_timestamp;
 }
 
-uint32_t MultiFramedRTPSink::preset_next_timestamp()
+void MultiFramedRTPSink::reset_presentation_times()
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-
-    uint32_t ts_now = convert_to_rtp_timestamp(tv);
-    m_timestamp_base = ts_now;
-    m_next_timestamp_has_been_preset = true;
-
-    return ts_now;
+    m_initial_presentation_time.tv_sec = m_most_recent_presentation_time.tv_sec = 0;
+    m_initial_presentation_time.tv_usec = m_most_recent_presentation_time.tv_usec = 0;
 }
 
 void MultiFramedRTPSink::build_and_send_packet(bool is_first_packet)
 {
     m_is_first_packet = is_first_packet;
 
-    unsigned rtp_hdr = 0x80000000;
-    rtp_hdr |= (m_rtp_payload_type << 16);
-    rtp_hdr |= m_seq_num;
+    // Set up the RTP header:
+    unsigned rtp_hdr = 0x80000000; // version 2
+    rtp_hdr |= (m_rtp_payload_type << 16); // PT
+    rtp_hdr |= m_seq_num; // sequence number
     m_out_buf->enqueue_word(rtp_hdr);
 
-    m_timestamp_position = m_out_buf->cur_packet_size();
-    m_out_buf->skip_bytes(4);
+    m_timestamp_position = m_out_buf->cur_packet_size(); // timestamp
+    m_out_buf->skip_bytes(4); // leave a hole for the timestamp
 
-    m_out_buf->enqueue_word(ssrc());
+    m_out_buf->enqueue_word(ssrc()); // synchronization source (SSRC) identifier
 
+    // Allow for a special, payload-format-specific header following the
+    // RTP header:
     m_special_header_position = m_out_buf->cur_packet_size();
     m_special_header_size = special_header_size();
     m_out_buf->skip_bytes(m_special_header_size);
 
     m_total_frame_specific_header_sizes = 0;
-    m_no_frames_left = false;
     m_num_frames_used_so_far = 0;
     pack_frame();
 }
@@ -3414,17 +3735,73 @@ void MultiFramedRTPSink::set_frame_padding(unsigned num_padding_bytes)
 
 void MultiFramedRTPSink::pack_frame()
 {
+    // First, see if we have an overflow frame that was too big for the last pkt
     if (m_out_buf->have_overflow_data()) {
+        // Use this frame before reading a new one from the source
         unsigned frame_size = m_out_buf->overflow_data_size();
         struct timeval presentation_time = m_out_buf->overflow_presentation_time();
         unsigned duration_in_microseconds = m_out_buf->overflow_duration_in_microseconds();
+        m_out_buf->use_overflow_data();
 
-        //after_getting_frame1(frame_size, 0, presentation_time, duration_in_microseconds);
+        after_getting_frame1(frame_size, 0, presentation_time, duration_in_microseconds);
+    } else {
+        // Normal case: we need to read a new frame from the source
+        if (!m_queue_src) return;
+
+        m_cur_frame_specific_header_position = m_out_buf->cur_packet_size();
+        m_cur_frame_specific_header_size = frame_special_header_size();
+        m_out_buf->skip_bytes(m_cur_frame_specific_header_size);
+        m_total_frame_specific_header_sizes += m_cur_frame_specific_header_size;
+
+        if (!strcmp(sdp_media_type(), "video")) {
+            H264Fragmenter *h264_fragmenter = (H264Fragmenter *) m_queue_src;
+            h264_fragmenter->get_next_frame(m_out_buf->cur_ptr(), m_out_buf->total_bytes_available(),
+                                            after_getting_frame, this);
+        } else {
+            // Audio stuff
+        }
     }
 }
 
 void MultiFramedRTPSink::send_packet_if_necessary()
 {
+    if (m_num_frames_used_so_far > 0) {
+        // Send the packet:
+        if (m_interface->write(m_out_buf->packet(), m_out_buf->cur_packet_size()) < 0) {
+            if (m_on_send_error_func) {
+                (*m_on_send_error_func)(m_on_send_error_data);
+            }
+        }
+        ++m_seq_num; // for next time
+    }
+
+    if (m_out_buf->have_overflow_data() &&
+        m_out_buf->total_bytes_available() > m_out_buf->total_buffer_size()/2) {
+        // Efficiency hack: Reset the packet start pointer to just in front of
+        // the overflow data (allowing for the RTP header and special headers),
+        // so that we probably don't have to "memmove" the overflow data
+        // into place when building the next packet:
+        unsigned new_packet_start = m_out_buf->cur_packet_size() -
+                                    (rtp_header_size + m_special_header_size + frame_special_header_size());
+        m_out_buf->adjust_packet_start(new_packet_start);
+    } else {
+        // Normal case: Reset the packet start pointer back to the start:
+        m_out_buf->reset_packet_start();
+    }
+    m_out_buf->reset_offset();
+    m_num_frames_used_so_far = 0;
+
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    int secs_diff = m_next_send_time.tv_sec - now.tv_sec;
+    int64_t usecs_to_go = secs_diff*1000000 + (m_next_send_time.tv_usec - now.tv_usec);
+    if (usecs_to_go < 0 || secs_diff < 0) {
+        usecs_to_go = 0;
+    }
+    if (m_next_task) {
+        m_scheduler->unschedule_delayed_task(m_next_task);
+    }
+    m_next_task = m_scheduler->schedule_delayed_task(usecs_to_go, send_next, this);
 }
 
 void MultiFramedRTPSink::send_next(void *first_arg)
@@ -3433,25 +3810,293 @@ void MultiFramedRTPSink::send_next(void *first_arg)
     sink->build_and_send_packet(false);
 }
 
+void MultiFramedRTPSink::after_getting_frame(void *client_data,
+                                             unsigned num_bytes_read, unsigned num_truncated_bytes,
+                                             struct timeval presentation_time, unsigned duration_in_microseconds)
+{
+    MultiFramedRTPSink *sink = (MultiFramedRTPSink *) client_data;
+    sink->after_getting_frame1(num_bytes_read, num_truncated_bytes,
+                               presentation_time, duration_in_microseconds);
+}
+
+void MultiFramedRTPSink::after_getting_frame1(unsigned frame_size, unsigned num_truncated_bytes,
+                                              struct timeval presentation_time, unsigned duration_in_microseconds)
+{
+    if (m_is_first_packet) {
+        // Record the fact that we're are starting to play now:
+        gettimeofday(&m_next_send_time, NULL);
+    }
+
+    m_most_recent_presentation_time = presentation_time;
+    if (m_initial_presentation_time.tv_sec == 0 && m_initial_presentation_time.tv_usec == 0) {
+        m_initial_presentation_time = presentation_time;
+    }
+
+    if (num_truncated_bytes > 0) {
+        unsigned const buffer_size = m_out_buf->total_bytes_available();
+        LOGW("The input frame data was too large for our buffer size (%u). %u bytes of trailing data was dropped!",
+             buffer_size, num_truncated_bytes);
+    }
+    unsigned cur_fragmentation_offset = m_cur_fragmentation_offset;
+    unsigned num_frame_bytes_to_use = frame_size;
+    unsigned overflow_bytes = 0;
+
+    // If we have already packed one or more frames into this packet,
+    // check whether this new frame is eligible to be packed after them.
+    // (This is indenpendent of whether the packet has enough room for this
+    // new frame; that check comes later)
+    if (m_num_frames_used_so_far > 0) {
+        if ((m_previous_frame_ended_fragmentation && !allow_other_frames_after_last_fragment()) ||
+            !frame_can_appear_after_packet_start(m_out_buf->cur_ptr(), frame_size)) {
+            // Save away this frame for next time:
+            num_frame_bytes_to_use = 0;
+            m_out_buf->set_overflow_data(m_out_buf->cur_packet_size(), frame_size,
+                                         presentation_time, duration_in_microseconds);
+        }
+    }
+    m_previous_frame_ended_fragmentation = false;
+
+    if (num_frame_bytes_to_use > 0) {
+        // Check whether this frame overflows the packet
+        if (m_out_buf->would_overflow(frame_size)) {
+            // Don't use this frame now; instead, save it as overflow data, and
+            // send it in the next packet instead. However, if the frame is too
+            // big to fit in a packet by itself, then we need to fragment it (and
+            // use some of it in this packet, if the payload format permits this.)
+            if (is_too_big_for_a_packet(frame_size) &&
+                (m_num_frames_used_so_far == 0 || allow_fragmentation_after_start())) {
+                // We need to fragment this frame, and use some of it now:
+                overflow_bytes = compute_overflow_for_new_frame(frame_size);
+                num_frame_bytes_to_use -= overflow_bytes;
+                m_cur_fragmentation_offset += num_frame_bytes_to_use;
+            } else {
+                // We don't use any of this frame:
+                overflow_bytes = frame_size;
+                num_frame_bytes_to_use = 0;
+            }
+            m_out_buf->set_overflow_data(m_out_buf->cur_packet_size() + num_frame_bytes_to_use,
+                                         overflow_bytes, presentation_time, duration_in_microseconds);
+        } else if (m_cur_fragmentation_offset > 0) {
+            // This is the last fragment of a frame that was fragmented over
+            // more than one packet. Do any special handing for this case:
+            m_cur_fragmentation_offset = 0;
+            m_previous_frame_ended_fragmentation = true;
+        }
+    }
+
+    if (num_frame_bytes_to_use == 0 && frame_size > 0) {
+        // Send our packet now, because we have filled it up:
+        send_packet_if_necessary();
+    } else {
+        // Use this frame in our outgoing packet:
+        unsigned char *frame_start = m_out_buf->cur_ptr();
+        m_out_buf->increment(num_frame_bytes_to_use);
+
+        // Here's where any payload format specific processing gets done:
+        do_special_frame_handling(cur_fragmentation_offset, frame_start,
+                                  num_frame_bytes_to_use,
+                                  presentation_time,
+                                  overflow_bytes);
+
+        ++m_num_frames_used_so_far;
+
+        // Update the time at which the next packet should be sent, based
+        // on the duration of the frame that we just packed into it.
+        // However, if this frame has overflow data remaining, then don't
+        // count its duratin yet.
+        if (overflow_bytes == 0) {
+            m_next_send_time.tv_usec += duration_in_microseconds;
+            m_next_send_time.tv_sec += m_next_send_time.tv_usec/1000000;
+            m_next_send_time.tv_usec %= 1000000;
+        }
+
+        // Send our packet now if
+        // (i) it's already at our preferred size or
+        // (ii) (heuristic) another frame of the same size as the one we just
+        //      read would overflow the packet, or
+        // (iii) it contains the last fragment of a fragmented frame, and we 
+        //      don't allow anything else to follow this or
+        // (iv) one frame per packet is allowed:
+        if (m_out_buf->is_preferred_size() ||
+            m_out_buf->would_overflow(num_frame_bytes_to_use) ||
+            (m_previous_frame_ended_fragmentation && !allow_other_frames_after_last_fragment()) ||
+            !frame_can_appear_after_packet_start(m_out_buf->cur_ptr() - frame_size, frame_size)) {
+            send_packet_if_necessary();
+        } else {
+            pack_frame();
+        }
+    }
+}
+
+bool MultiFramedRTPSink::is_too_big_for_a_packet(unsigned num_bytes) const
+{
+    num_bytes += rtp_header_size + special_header_size() + frame_special_header_size();
+    return m_out_buf->is_too_big_for_a_packet(num_bytes);
+}
+
 /////////////////////////////////////////////////////////////
 
-H264Fragmenter::H264Fragmenter(unsigned input_buffer_max, unsigned max_output_packet_size) :
+H264Fragmenter::H264Fragmenter(xutil::Queue<xmedia::Frame *> * queue_src,
+                               unsigned input_buffer_max, unsigned max_output_packet_size) :
+    m_queue_src(queue_src),
     m_input_buffer_size(input_buffer_max + 1), m_max_output_packet_size(max_output_packet_size),
     m_num_valid_data_bytes(1), m_cur_data_offset(1),
-    m_last_fragment_completed_nal_unit(true)
+    m_last_fragment_completed_nal_unit(true),
+    m_duration_in_microseconds(0),
+    m_nalu_index_in_parser(0),
+    m_frame(NULL),
+    m_prev_ts(-1)
 {
+    m_presentation_time.tv_sec = m_presentation_time.tv_usec = 0;
+
     m_input_buffer = new unsigned char[m_input_buffer_size];
 }
 
 H264Fragmenter::~H264Fragmenter()
 {
+    SAFE_DELETE(m_frame);
     SAFE_DELETE_ARRAY(m_input_buffer);
 }
 
-H264VideoRTPSink::H264VideoRTPSink(Udp *udp, unsigned char rtp_payload_format,
+void H264Fragmenter::get_next_frame(unsigned char *to, unsigned max_size,
+                                    after_getting_func *func, void *data)
+{
+    m_to = to;
+    m_max_size = max_size; // max buffer size to store the read data
+    m_after_getting_func = func; // callback when frame read
+    m_after_getting_client_data = data;
+
+    if (m_num_valid_data_bytes == 1) {
+        // We have no NAL unit data currently in the buffer. Read a new one
+        if (m_nalu_index_in_parser == 0) {
+            SAFE_DELETE(m_frame);
+
+            if (m_queue_src->pop(m_frame) < 0) {
+                // pop a frame from input queue
+                return;
+            }
+
+            // Split the frame into nalus
+            m_vparser.process(m_frame->m_dat, m_frame->m_dat_len);
+        }
+
+        unsigned frame_size = m_vparser.get_nalu_length(m_nalu_index_in_parser);
+        unsigned num_truncated_bytes = 0;
+        if (frame_size > m_input_buffer_size - 1) {
+            LOGW("frame_size=%u, m_input_buffer_size-1=%u",
+                 frame_size, m_input_buffer_size - 1);
+            num_truncated_bytes = frame_size - (m_input_buffer_size - 1);
+            frame_size = m_input_buffer_size - 1;
+        }
+        memcpy(&m_input_buffer[1], m_vparser.get_nalu_data(m_nalu_index_in_parser), frame_size);
+
+        struct timeval presentation_time;
+        presentation_time.tv_sec = m_frame->m_ts/1000;
+        presentation_time.tv_usec = (m_frame->m_ts%1000)*1000;
+
+        if (++m_nalu_index_in_parser >= m_vparser.get_nalu_num()) {
+            // this frame is done
+            m_nalu_index_in_parser = 0;
+            if (m_prev_ts == -1) {
+                m_prev_ts = m_frame->m_ts;
+            }
+            m_duration_in_microseconds = (m_frame->m_ts - m_prev_ts) * 1000;
+            m_prev_ts = m_frame->m_ts;
+        }
+
+        after_getting_frame1(frame_size, num_truncated_bytes,
+                             presentation_time, m_duration_in_microseconds);
+    } else {
+        // We have NAL unit data in the buffer. There are three cases to consider:
+        // 1. There is a new NAL unit in the buffer, and it's small enough to deliver
+        //    to the RTP sink.
+        // 2. There is a new NAL unit in the buffer, but it's too large to deliver to
+        //    the RTP sink in its entirety. Deliver the first fragment of this data,
+        //    as a FU packet, with one extra preceding header byte (for the "FU header").
+        // 3. There is a NAL unit in the buffer, and we've already deliverd some
+        //    fragment(s) of this. Deliver the next fragment of this data,
+        //    as a FU packet, with two (H.264) extra preceding header bytes
+        //    (for the "NAL header" and the "FU header").
+        if (m_max_size < m_max_output_packet_size) { // shouldn't happen
+            LOGW("m_max_size(%u) is smaller than expected",
+                 m_max_size);
+        } else {
+            m_max_size = m_max_output_packet_size;
+        }
+
+        m_last_fragment_completed_nal_unit = true; // by default
+        if (m_cur_data_offset == 1) { // case 1 or 2
+            if (m_num_valid_data_bytes - 1 <= m_max_size) { // case 1
+                memmove(m_to, &m_input_buffer[1], m_num_valid_data_bytes - 1);
+                m_frame_size = m_num_valid_data_bytes - 1;
+                m_cur_data_offset = m_num_valid_data_bytes;
+            } else { // case 2
+                // We need to send the NAL unit data as a FU packets. Deliver the first
+                // packet now. Note that we add "NAL header" and "FU header" bytes to the front
+                // of the packet (overwriting the existing "NAL header")
+                m_input_buffer[0] = (m_input_buffer[1] & 0xE0) | 28; // FU indicator
+                m_input_buffer[1] = 0x80 | (m_input_buffer[1] & 0x1F); //  FU header (with S bit)
+                memmove(m_to, m_input_buffer, m_max_size);
+                m_frame_size = m_max_size;
+                m_cur_data_offset += m_max_size - 1;
+                m_last_fragment_completed_nal_unit = false;
+            }
+        } else { // case 3
+            // We are sending this NAL unit data as FU packets. We've already sent the
+            // first packet (fragment). Now, send the next fragment. Note that we add 
+            // "NAL header" and "FU header" bytes to the front. (We reuse these bytes that
+            // we already sent for the first fragment, but clear the S bit, and add the E
+            // bit if this is the last fragment.)
+            unsigned num_extra_header_bytes = 2;
+            m_input_buffer[m_cur_data_offset - 2] = m_input_buffer[0]; // FU indicator
+            m_input_buffer[m_cur_data_offset - 1] = m_input_buffer[1]&~0x80; // FU header (no S bit)
+            unsigned num_bytes_to_send = num_extra_header_bytes + (m_num_valid_data_bytes - m_cur_data_offset);
+            if (num_bytes_to_send > m_max_size) {
+                // We can't send all of the remaining data this time:
+                num_bytes_to_send = m_max_size;
+                m_last_fragment_completed_nal_unit = false;
+            } else {
+                // This is the last fragment:
+                m_input_buffer[m_cur_data_offset - 1] |= 0x40; // set the E bit in the FU header
+            }
+            memmove(m_to, &m_input_buffer[m_cur_data_offset - num_extra_header_bytes], num_bytes_to_send);
+            m_frame_size = num_bytes_to_send;
+            m_cur_data_offset += num_bytes_to_send - num_extra_header_bytes;
+        }
+
+        if (m_cur_data_offset >= m_num_valid_data_bytes) {
+            m_num_valid_data_bytes = m_cur_data_offset = 1;
+        }
+
+        m_after_getting_func(m_after_getting_client_data,
+                             m_frame_size, 0,
+                             m_presentation_time, m_duration_in_microseconds);
+        m_duration_in_microseconds = 0;
+    }
+}
+
+bool H264Fragmenter::picture_end_marker() const
+{
+    return m_nalu_index_in_parser == 0;
+}
+
+void H264Fragmenter::after_getting_frame1(unsigned frame_size, unsigned num_truncated_bytes,
+                                          struct timeval presentation_time, unsigned duration_in_microseconds)
+{
+    m_num_valid_data_bytes += frame_size;
+    UNUSED(num_truncated_bytes);
+    m_presentation_time = presentation_time;
+    m_duration_in_microseconds = duration_in_microseconds;
+
+    get_next_frame(m_to, m_max_size,
+                   m_after_getting_func, m_after_getting_client_data);
+}
+
+H264VideoRTPSink::H264VideoRTPSink(TaskScheduler *scheduler,
+                                   RtpInterface *interface, unsigned char rtp_payload_format,
                                    uint8_t const *sps, unsigned sps_size,
                                    uint8_t const *pps, unsigned pps_size) :
-    MultiFramedRTPSink(udp, rtp_payload_format, 90000, "H264"),
+    MultiFramedRTPSink(scheduler, interface, rtp_payload_format, 90000, "H264"),
     m_our_fragmenter(NULL), m_fmtp_sdp_line(NULL)
 {
     if (sps) {
@@ -3476,6 +4121,7 @@ H264VideoRTPSink::~H264VideoRTPSink()
 {
     SAFE_FREE(m_fmtp_sdp_line);
     SAFE_DELETE_ARRAY(m_sps); SAFE_DELETE_ARRAY(m_pps);
+    SAFE_DELETE(m_our_fragmenter);
 }
 
 char const *H264VideoRTPSink::sdp_media_type() const
@@ -3508,10 +4154,11 @@ char const *H264VideoRTPSink::aux_sdp_line()
 bool H264VideoRTPSink::continue_playing()
 {
     if (!m_our_fragmenter) {
-        m_our_fragmenter = new H264Fragmenter(OutPacketBuffer::max_size, our_max_packet_size() - 12);
+        m_our_fragmenter = new H264Fragmenter(m_queue_src,
+                                              OutPacketBuffer::max_size, our_max_packet_size() - rtp_header_size);
     }
-
     m_queue_src = (xutil::Queue<xmedia::Frame *> *) m_our_fragmenter;
+
     return MultiFramedRTPSink::continue_playing();
 }
 
@@ -3521,6 +4168,17 @@ void H264VideoRTPSink::do_special_frame_handling(unsigned fragmentation_offset,
                                                  struct timeval frame_presentation_time,
                                                  unsigned num_remaining_bytes)
 {
+    // Set the RTP 'M' (marker) bit if
+    // 1/ The most recently delivered fragment was the end of (or the only fragment of) an NAL unit, and
+    // 2/ This NAL unit was the last NAL unit of an 'access unit' (i.e. video frame).
+    if (m_our_fragmenter) {
+        if (m_our_fragmenter->last_fragment_completed_nal_unit() &&
+            m_our_fragmenter->picture_end_marker()) {
+            set_marker_bit();
+        }
+    }
+
+    set_timestamp(frame_presentation_time);
 }
 
 bool H264VideoRTPSink::frame_can_appear_after_packet_start(unsigned char const *frame_start,
@@ -3531,12 +4189,13 @@ bool H264VideoRTPSink::frame_can_appear_after_packet_start(unsigned char const *
 
 /////////////////////////////////////////////////////////////
 
-MPEG4GenericRTPSink::MPEG4GenericRTPSink(Udp *udp, unsigned char rtp_payload_format,
+MPEG4GenericRTPSink::MPEG4GenericRTPSink(TaskScheduler *scheduler,
+                                         RtpInterface *interface, unsigned char rtp_payload_format,
                                          uint32_t rtp_timestamp_frequency,
                                          char const *sdp_media_type_string,
                                          char const *mpeg4_mode, char const *config_string,
                                          unsigned num_channels) :
-    MultiFramedRTPSink(udp, rtp_payload_format,
+    MultiFramedRTPSink(scheduler, interface, rtp_payload_format,
                        rtp_timestamp_frequency, "MPEG4-GENERIC", num_channels),
     m_sdp_media_type_string(strdup_(sdp_media_type_string)),
     m_mpeg4_mode(strdup_(mpeg4_mode)),

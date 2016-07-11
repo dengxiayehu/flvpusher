@@ -6,14 +6,26 @@
 #include <xnet.h>
 
 #include "media_sink.h"
+#include "rtsp_common.h"
 
 namespace flvpusher {
 
-class SubstreamDescriptor;
-class RtspClient;
-class MultiFramedRTPSink;
-class Rtcp;
-class MediaSession;
+class SubstreamDescriptor {
+public:
+    SubstreamDescriptor(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp, unsigned track_id);
+    ~SubstreamDescriptor();
+
+    MultiFramedRTPSink *rtp_sink() const { return m_rtp_sink; }
+    Rtcp *rtcp() const { return m_rtcp; }
+    char const *sdp_lines() const { return m_sdp_lines; }
+
+private:
+    MultiFramedRTPSink *m_rtp_sink;
+    Rtcp *m_rtcp;
+    char *m_sdp_lines;
+};
+
+/////////////////////////////////////////////////////////////
 
 class RtspSink : public MediaSink {
 public:
@@ -30,7 +42,7 @@ public:
 
 private:
     void add_stream(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp);
-    int check_and_set_destination_and_play();
+    int set_destination_and_play();
 
     static void after_playing(void *client_data);
 
@@ -38,26 +50,24 @@ private:
         xutil::Queue<xmedia::Frame *> queue;
         MultiFramedRTPSink *sink;
         Rtcp *rtcp;
-        xnet::Udp *rtp_socket;
-        xnet::Udp *rtcp_socket;
+        RtpInterface *rtp_socket;
+        RtpInterface *rtcp_socket;
 
         MediaAggregation();
         ~MediaAggregation();
     };
 
 private:
-    DECL_THREAD_ROUTINE(RtspSink, proc_routine);
-    xutil::RecursiveMutex m_mutex;
     xnet::AddressPort m_our_ap;
-    std::string m_liveurl;
+    DECL_THREAD_ROUTINE(RtspSink, proc_routine);
     xutil::Thread *m_proc_thrd;
+    xutil::RecursiveMutex m_mutex;
+    std::string m_liveurl;
     RtspClient *m_client;
     unsigned m_substream_sdp_sizes;
     std::vector<SubstreamDescriptor *> m_substream_descriptors;
     unsigned m_last_track_id;
-    MediaSession *m_sess;
-    MediaAggregation m_video;
-    MediaAggregation m_audio;
+    MediaAggregation *m_video, *m_audio;
 };
 
 }

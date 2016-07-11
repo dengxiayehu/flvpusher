@@ -43,7 +43,7 @@ public:
     void set_sockfd(int sockfd);
     virtual void close();
     virtual int write(const uint8_t *buf, int size,
-            struct sockaddr_in *remote = NULL);
+                      struct sockaddr_in *remote = NULL);
     virtual int read(uint8_t *buf, int buf_size);
     virtual int readn(uint8_t *buf, int buf_size);
     virtual int connect(const AddressPort &ap);
@@ -98,17 +98,18 @@ public:
     Udp();
     Udp(const AddressPort &remote);
     Udp(const char *ip, const uint16_t port);
+    virtual ~Udp();
 
     virtual int open(AddressPort &ap);
 
     virtual int write(const uint8_t *buf, int size,
-            struct sockaddr_in *remote = NULL);
+                      struct sockaddr_in *remote = NULL);
 
 private:
     void init_remote_addr(const AddressPort &ap);
 
 private:
-    struct sockaddr_in m_remote_addr;
+    struct sockaddr_in *m_remote_addr;
 };
 
 std::string our_ip();
