@@ -3,8 +3,57 @@
 #include <xuri.h>
 
 #include "rtsp_sink.h"
+#include "rtsp_client.h"
+#include "rtp_interface.h"
+#include "h264_video_rtp_sink.h"
+#include "mpeg4_generic_rtp_sink.h"
+#include "rtcp.h"
+#include "common/raw_parser.h"
+
+using namespace xutil;
+using namespace xmedia;
 
 namespace flvpusher {
+    
+class SubstreamDescriptor {
+public:
+    SubstreamDescriptor(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp, unsigned track_id);
+    ~SubstreamDescriptor();
+
+    MultiFramedRTPSink *rtp_sink() const { return m_rtp_sink; }
+    Rtcp *rtcp() const { return m_rtcp; }
+    char const *sdp_lines() const { return m_sdp_lines; }
+
+private:
+    MultiFramedRTPSink *m_rtp_sink;
+    Rtcp *m_rtcp;
+    char *m_sdp_lines;
+};
+
+SubstreamDescriptor::SubstreamDescriptor(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp, unsigned track_id) :
+    m_rtp_sink(rtp_sink), m_rtcp(rtcp)
+{
+    char *rtpmap_line = m_rtp_sink->rtpmap_line();
+    char const *aux_sdp_line = m_rtp_sink->aux_sdp_line();
+    if (!aux_sdp_line) aux_sdp_line = "";
+
+    m_sdp_lines = strdup_(STR(sprintf_("m=%s 0 RTP/AVP %u"CRLF
+                                       "%s"
+                                       "%s"
+                                       "a=control:trackID=%u"CRLF,
+                                       m_rtp_sink->sdp_media_type(), m_rtp_sink->rtp_payload_type(),
+                                       rtpmap_line,
+                                       aux_sdp_line,
+                                       track_id)));
+    SAFE_FREE(rtpmap_line);
+}
+
+SubstreamDescriptor::~SubstreamDescriptor()
+{
+    SAFE_FREE(m_sdp_lines);
+}
+
+/////////////////////////////////////////////////////////////
 
 RtspSink::RtspSink(const std::string &flvpath) :
     MediaSink(flvpath),
@@ -197,31 +246,6 @@ void RtspSink::after_playing(void *client_data)
     MultiFramedRTPSink *rtp_sink = (MultiFramedRTPSink *) client_data;
     rtp_sink->stop_playing();
     rtp_sink->stop_playing();
-}
-
-/////////////////////////////////////////////////////////////
-
-SubstreamDescriptor::SubstreamDescriptor(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp, unsigned track_id) :
-    m_rtp_sink(rtp_sink), m_rtcp(rtcp)
-{
-    char *rtpmap_line = m_rtp_sink->rtpmap_line();
-    char const *aux_sdp_line = m_rtp_sink->aux_sdp_line();
-    if (!aux_sdp_line) aux_sdp_line = "";
-
-    m_sdp_lines = strdup_(STR(sprintf_("m=%s 0 RTP/AVP %u"CRLF
-                                       "%s"
-                                       "%s"
-                                       "a=control:trackID=%u"CRLF,
-                                       m_rtp_sink->sdp_media_type(), m_rtp_sink->rtp_payload_type(),
-                                       rtpmap_line,
-                                       aux_sdp_line,
-                                       track_id)));
-    SAFE_FREE(rtpmap_line);
-}
-
-SubstreamDescriptor::~SubstreamDescriptor()
-{
-    SAFE_FREE(m_sdp_lines);
 }
 
 /////////////////////////////////////////////////////////////

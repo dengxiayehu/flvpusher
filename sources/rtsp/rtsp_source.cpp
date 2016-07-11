@@ -1,7 +1,7 @@
 #include <xlog.h>
 
 #include "rtsp_source.h"
-#include "rtsp_common.h"
+#include "rtsp_client.h"
 #include "common/media_sink.h"
 
 using namespace std;

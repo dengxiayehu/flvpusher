@@ -6,26 +6,14 @@
 #include <xnet.h>
 
 #include "common/media_sink.h"
-#include "rtsp_common.h"
 
 namespace flvpusher {
 
-class SubstreamDescriptor {
-public:
-    SubstreamDescriptor(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp, unsigned track_id);
-    ~SubstreamDescriptor();
-
-    MultiFramedRTPSink *rtp_sink() const { return m_rtp_sink; }
-    Rtcp *rtcp() const { return m_rtcp; }
-    char const *sdp_lines() const { return m_sdp_lines; }
-
-private:
-    MultiFramedRTPSink *m_rtp_sink;
-    Rtcp *m_rtcp;
-    char *m_sdp_lines;
-};
-
-/////////////////////////////////////////////////////////////
+class MultiFramedRTPSink;
+class Rtcp;
+class RtpInterface;
+class RtspClient;
+class SubstreamDescriptor;
 
 class RtspSink : public MediaSink {
 public:
