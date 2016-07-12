@@ -42,6 +42,11 @@ MediaSink::Type RtmpSink::type() const
     return RTMP_SINK;
 }
 
+std::string RtmpSink::type_str() const
+{
+    return "rtmp";
+}
+
 int RtmpSink::connect(const std::string &liveurl)
 {
     RTMPContext *rt = &m_rt;

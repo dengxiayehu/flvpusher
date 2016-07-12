@@ -6,8 +6,8 @@
 
 #define DEFAULT_USER_AGENT  "flvpusher (dengxiayehu@yeah.net)"
 
-//#define XDEBUG
-//#define XDEBUG_RTSP_MESSAGE
+#define XDEBUG
+#define XDEBUG_RTSP_MESSAGE
 
 using namespace std;
 using namespace xutil;
@@ -213,6 +213,7 @@ void RtspClient::handle_alternative_request_byte1(uint8_t request_byte)
     int ret = recv_response(&ri, request_byte);
     if (ret < 0) {
         // Handle error
+        LOGE("recv_response error");
     } else if (ri.response_code == 200) {
         string str;
         if (m_requests.pop(str) == 0) {

@@ -88,6 +88,11 @@ MediaSink::Type RtspSink::type() const
     return RTSP_SINK;
 }
 
+std::string RtspSink::type_str() const
+{
+    return "rtsp";
+}
+
 int RtspSink::connect(const std::string &liveurl)
 {
     m_our_ap = AddressPort(our_ip(), 0);

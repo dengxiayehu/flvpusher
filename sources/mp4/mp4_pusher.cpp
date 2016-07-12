@@ -52,10 +52,11 @@ int MP4Pusher::loop()
     
     LOGI("Pushing file \"%s\" ..", STR(m_input));
 
-    // Send metadata pkt to rtmpserver
+    // Send metadata pkt to mediaserver
     if (m_sink->type() == MediaSink::RTMP_SINK &&
         !send_metadata()) {
-        LOGE("Send metadata to rtmpserver failed (cont)");
+        LOGE("Send metadata to %sserver failed (cont)",
+             STR(m_sink->type_str()));
     }
 
     /* Media-data send-thread is working .. */

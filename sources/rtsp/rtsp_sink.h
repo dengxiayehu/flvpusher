@@ -21,6 +21,7 @@ public:
     virtual ~RtspSink();
 
     virtual Type type() const;
+    virtual std::string type_str() const;
 
     virtual int connect(const std::string &liveurl);
     virtual int disconnect();

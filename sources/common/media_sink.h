@@ -18,6 +18,7 @@ public:
 
     enum Type { RTMP_SINK, RTSP_SINK, HLS_SINK };
     virtual Type type() const = 0;
+    virtual std::string type_str() const = 0;
 
     virtual int connect(const std::string &liveurl) = 0;
     virtual int disconnect() = 0;
