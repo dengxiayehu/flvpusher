@@ -58,6 +58,7 @@ private:
     unsigned m_last_track_id;
     MediaAggregation *m_video, *m_audio;
     bool m_send_error;
+    bool m_start_sink;
 };
 
 }

@@ -9,6 +9,7 @@
 #include "mpeg4_generic_rtp_sink.h"
 #include "rtcp.h"
 #include "common/raw_parser.h"
+#include "common/config.h"
 
 using namespace xutil;
 using namespace xmedia;
@@ -61,7 +62,8 @@ RtspSink::RtspSink(const std::string &flvpath) :
     m_substream_sdp_sizes(0),
     m_last_track_id(0),
     m_video(new MediaAggregation), m_audio(new MediaAggregation),
-    m_send_error(false)
+    m_send_error(false),
+    m_start_sink(false)
 {
     m_client = new RtspClient(NULL);
 }
@@ -151,6 +153,11 @@ int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
         }
     }
 
+    if (!m_start_sink &&
+        timestamp > RTSP_SINK_BUFFERING_TIME) {
+        m_start_sink = true;
+    }
+
     return 0;
 }
 
@@ -159,6 +166,9 @@ int RtspSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
     Frame *f = new Frame;
     f->make_frame(timestamp, dat, length, false);
     m_audio->queue.push(f);
+
+    if (!m_start_sink)
+        return 0;
 
     AutoLock l(m_mutex);
 

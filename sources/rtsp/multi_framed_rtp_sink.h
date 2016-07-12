@@ -140,6 +140,7 @@ private:
     void* m_on_send_error_data;
 
     TaskToken m_next_task;
+    int32_t m_last_audio_timestamp;
 };
 
 }

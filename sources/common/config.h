@@ -32,4 +32,6 @@ extern char abs_program[];
 #define DEFAULT_HLS_EXPIRE_TIME     10
 #define DEFAULT_HLS_SCAN_INTERVAL   5
 
+#define RTSP_SINK_BUFFERING_TIME    1000 // ms
+
 #endif /* end of _CONFIG_H_ */
