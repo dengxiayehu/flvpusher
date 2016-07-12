@@ -21,6 +21,16 @@ public:
     virtual char const *aux_sdp_line();
 
 private:
+    virtual bool frame_can_appear_after_packet_start(unsigned char const *frame_start,
+                                                     unsigned num_bytes_in_frame) const;
+    virtual void do_special_frame_handling(unsigned fragmentation_offset,
+                                           unsigned char *frame_start,
+                                           unsigned num_bytes_in_frame,
+                                           struct timeval frame_presentation_time,
+                                           unsigned num_remaining_bytes);
+    virtual unsigned special_header_size() const;
+
+private:
     char const *m_sdp_media_type_string;
     char const *m_mpeg4_mode;
     char const *m_config_string;

@@ -122,7 +122,11 @@ int RtspSink::disconnect()
 
 int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
 {
-    AutoLock _l(m_mutex);
+    Frame *f = new Frame;
+    f->make_frame(timestamp, dat, length, false);
+    m_video->queue.push(f);
+
+    AutoLock l(m_mutex);
 
     if (m_send_error) return -1;
 
@@ -147,14 +151,16 @@ int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
         }
     }
 
-    Frame *f = new Frame;
-    f->make_frame(timestamp, dat, length, false);
-    return m_video->queue.push(f);
+    return 0;
 }
 
 int RtspSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
 {
-    AutoLock _l(m_mutex);
+    Frame *f = new Frame;
+    f->make_frame(timestamp, dat, length, false);
+    m_audio->queue.push(f);
+
+    AutoLock l(m_mutex);
 
     if (m_send_error) return -1;
 
@@ -183,9 +189,7 @@ int RtspSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
         }
     }
 
-    Frame *f = new Frame;
-    f->make_frame(timestamp, dat, length, false);
-    return m_audio->queue.push(f);
+    return 0;
 }
 
 void RtspSink::add_stream(MultiFramedRTPSink *rtp_sink, Rtcp *rtcp)
@@ -250,10 +254,9 @@ int RtspSink::set_destination_and_play()
 
     m_video->sink->set_on_send_error_func(on_send_error, this);
     m_video->sink->start_playing(m_video->queue, after_playing, m_video->sink);
-#if 0
+
     m_audio->sink->set_on_send_error_func(on_send_error, this);
     m_audio->sink->start_playing(m_audio->queue, after_playing, m_audio->sink);
-#endif
 
     RtpInterface::set_server_request_alternative_byte_handler(
             m_client->get_sockfd(),

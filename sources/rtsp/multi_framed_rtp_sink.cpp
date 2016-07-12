@@ -306,7 +306,13 @@ void MultiFramedRTPSink::pack_frame()
             h264_fragmenter->get_next_frame(m_out_buf->cur_ptr(), m_out_buf->total_bytes_available(),
                                             after_getting_frame, this);
         } else {
-            // Audio stuff
+            Frame *f = NULL;
+            if (m_queue_src->pop(f) == 0) {
+                struct timeval presentation_time = { f->m_ts/1000, (f->m_ts%1000)*1000 };
+                memcpy(m_out_buf->cur_ptr(), f->m_dat+7, f->m_dat_len-7);
+                after_getting_frame(this, f->m_dat_len-7, 0, presentation_time, 22 * 1000);
+            }
+            SAFE_DELETE(f);
         }
     }
 }
