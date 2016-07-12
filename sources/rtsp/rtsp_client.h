@@ -126,7 +126,7 @@ public:
 
     TaskScheduler *scheduler() const { return m_scheduler; }
 
-    static void continue_after_option(void *client_data);
+    static void continue_after_options(void *client_data);
     static void continue_after_describe(void *client_data);
     static void continue_after_get_parameter(void *client_data);
 

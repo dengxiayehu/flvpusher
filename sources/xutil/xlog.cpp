@@ -20,7 +20,7 @@
 #define COLOR_FORMAT_LEVEL_DEBUG    "\033[37;0m"
 #define COLOR_FORMAT_LEVEL_LOG      "\033[37;0m"
 
-#define DEBUG_GDB 0
+#define DEBUG_GDB 1
 
 using namespace xutil;
 

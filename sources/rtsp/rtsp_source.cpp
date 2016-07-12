@@ -37,8 +37,8 @@ int RtspSource::prepare()
         return -1;
 
     if (m_client->request_options(
-                (TaskFunc *) RtspClient::continue_after_option) < 0) {
-        LOGE("Failed to send OPTION command");
+                (TaskFunc *) RtspClient::continue_after_options) < 0) {
+        LOGE("Failed to send OPTIONS command");
         return -1;
     }
 

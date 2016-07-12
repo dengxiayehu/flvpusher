@@ -873,10 +873,10 @@ void RtspClient::send_liveness_command(void *client_data)
     if (rtsp_client->m_server_supports_get_parameter)
         rtsp_client->request_get_parameter(continue_after_get_parameter);
     else
-        rtsp_client->request_options(continue_after_option);
+        rtsp_client->request_options(continue_after_options);
 }
 
-void RtspClient::continue_after_option(void *client_data)
+void RtspClient::continue_after_options(void *client_data)
 {
     RtspClient *rtsp_client = (RtspClient *) client_data;
     if (!rtsp_client->m_server_supports_get_parameter)
