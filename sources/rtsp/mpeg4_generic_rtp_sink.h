@@ -20,6 +20,8 @@ public:
     virtual char const *sdp_media_type() const;
     virtual char const *aux_sdp_line();
 
+    char const *config_string() const { return m_config_string; }
+
 private:
     virtual bool frame_can_appear_after_packet_start(unsigned char const *frame_start,
                                                      unsigned num_bytes_in_frame) const;
