@@ -11,7 +11,7 @@ H264Fragmenter::H264Fragmenter(xutil::Queue<xmedia::Frame *> * queue_src,
     m_duration_in_microseconds(0),
     m_nalu_index_in_parser(0),
     m_frame(NULL),
-    m_prev_ts(-1)
+    m_last_timestamp(-1)
 {
     m_presentation_time.tv_sec = m_presentation_time.tv_usec = 0;
 
@@ -38,12 +38,16 @@ void H264Fragmenter::get_next_frame(unsigned char *to, unsigned max_size,
             SAFE_DELETE(m_frame);
 
             if (m_queue_src->pop(m_frame) < 0) {
-                // pop a frame from input queue
+                // Pop a frame from input queue
                 return;
             }
 
             // Split the frame into nalus
             m_vparser.process(m_frame->m_dat, m_frame->m_dat_len);
+
+            if (m_last_timestamp == -1) {
+                m_last_timestamp = m_frame->m_ts;
+            }
         }
 
         unsigned frame_size = m_vparser.get_nalu_length(m_nalu_index_in_parser);
@@ -63,11 +67,8 @@ void H264Fragmenter::get_next_frame(unsigned char *to, unsigned max_size,
         if (++m_nalu_index_in_parser >= m_vparser.get_nalu_num()) {
             // this frame is done
             m_nalu_index_in_parser = 0;
-            if (m_prev_ts == -1) {
-                m_prev_ts = m_frame->m_ts;
-            }
-            m_duration_in_microseconds = (m_frame->m_ts - m_prev_ts) * 1000;
-            m_prev_ts = m_frame->m_ts;
+            m_duration_in_microseconds = (m_frame->m_ts - m_last_timestamp)*1000;
+            m_last_timestamp = m_frame->m_ts;
         }
 
         after_getting_frame1(frame_size, num_truncated_bytes,

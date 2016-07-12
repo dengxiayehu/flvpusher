@@ -29,11 +29,9 @@ MultiFramedRTPSink::MultiFramedRTPSink(TaskScheduler *scheduler,
     m_on_send_error_func(NULL), m_on_send_error_data(NULL),
     m_next_task(NULL)
 {
-    m_seq_num = rand();
+    m_seq_num = 0;
     m_ssrc = random32();
-    m_timestamp_base = random32();
-    gettimeofday(&m_creation_time, NULL);
-    reset_presentation_times();
+    m_timestamp_base = 0;
 
     // Default max packet size (1500, minus allowance for IP, UDP, UMTP headers)
     // (Also, make it a multiple of 4 bytes, just in case that matters.)
@@ -156,12 +154,6 @@ uint32_t MultiFramedRTPSink::convert_to_rtp_timestamp(struct timeval tv)
 #endif
 
     return rtp_timestamp;
-}
-
-void MultiFramedRTPSink::reset_presentation_times()
-{
-    m_initial_presentation_time.tv_sec = m_most_recent_presentation_time.tv_sec = 0;
-    m_initial_presentation_time.tv_usec = m_most_recent_presentation_time.tv_usec = 0;
 }
 
 void MultiFramedRTPSink::build_and_send_packet(bool is_first_packet)
@@ -320,8 +312,7 @@ void MultiFramedRTPSink::pack_frame()
                 parse_asc(asc, 2,
                           profile, sample_rate_idx, channel);
                 after_getting_frame(this, f->m_dat_len-7, 0,
-                                    presentation_time,
-                                    1024*1000/atoi(samplerate_idx_to_str(sample_rate_idx)));
+                                    presentation_time, 1024*1000/atoi(samplerate_idx_to_str(sample_rate_idx))*1000);
             }
             SAFE_DELETE(f);
         }
@@ -363,9 +354,6 @@ void MultiFramedRTPSink::send_packet_if_necessary()
     if (usecs_to_go < 0 || secs_diff < 0) {
         usecs_to_go = 0;
     }
-    if (m_next_task) {
-        m_scheduler->unschedule_delayed_task(m_next_task);
-    }
     m_next_task = m_scheduler->schedule_delayed_task(usecs_to_go, send_next, this);
 }
 
@@ -390,11 +378,6 @@ void MultiFramedRTPSink::after_getting_frame1(unsigned frame_size, unsigned num_
     if (m_is_first_packet) {
         // Record the fact that we're are starting to play now:
         gettimeofday(&m_next_send_time, NULL);
-    }
-
-    m_most_recent_presentation_time = presentation_time;
-    if (m_initial_presentation_time.tv_sec == 0 && m_initial_presentation_time.tv_usec == 0) {
-        m_initial_presentation_time = presentation_time;
     }
 
     if (num_truncated_bytes > 0) {

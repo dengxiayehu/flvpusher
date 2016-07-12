@@ -46,7 +46,7 @@ private:
     xmedia::Frame *m_frame;
     after_getting_func *m_after_getting_func;
     void *m_after_getting_client_data;
-    int32_t m_prev_ts;
+    int32_t m_last_timestamp;
 };
 
 }

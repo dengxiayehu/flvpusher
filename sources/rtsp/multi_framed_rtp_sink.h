@@ -38,11 +38,6 @@ public:
 
     uint16_t current_seq_num() const { return m_seq_num; }
 
-    struct timeval const &creation_time() const { return m_creation_time; }
-    struct timeval const &initial_presentation_time() const { return m_initial_presentation_time; }
-    struct timeval const &most_recent_presentation_time() const { return m_most_recent_presentation_time; }
-    void reset_presentation_times();
-
     void set_packet_sizes(unsigned preferred_packet_size, unsigned max_packet_size);
 
     typedef void (on_send_error_func)(void* client_data);
@@ -124,7 +119,6 @@ private:
     uint32_t m_rtp_timestamp_frequency;
     const char *m_rtp_payload_format_name;
     unsigned m_num_channels;
-    struct timeval m_creation_time, m_initial_presentation_time, m_most_recent_presentation_time;
 
     OutPacketBuffer *m_out_buf;
 

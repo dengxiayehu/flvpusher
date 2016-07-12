@@ -39,10 +39,6 @@ AlarmHandler::AlarmHandler(TaskFunc *proc, void *client_data, timeval tv) :
 {
 }
 
-#ifndef INT_MAX
-#  define INT_MAX 0x7FFFFFFF
-#endif
-
 #define DELAY_ZERO (timeval) {0, 0}
 
 DelayQueue::DelayQueue() :
