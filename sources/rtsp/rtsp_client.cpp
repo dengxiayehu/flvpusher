@@ -6,8 +6,8 @@
 
 #define DEFAULT_USER_AGENT  "flvpusher (dengxiayehu@yeah.net)"
 
-#define XDEBUG
-#define XDEBUG_RTSP_MESSAGE
+//#define XDEBUG
+//#define XDEBUG_RTSP_MESSAGE
 
 using namespace std;
 using namespace xutil;

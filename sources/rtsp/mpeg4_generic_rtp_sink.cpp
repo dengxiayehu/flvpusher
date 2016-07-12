@@ -78,7 +78,7 @@ void MPEG4GenericRTPSink::do_special_frame_handling(unsigned fragmentation_offse
         set_marker_bit();
     }
 
-    // Important: Also call our base class's doSpecialFrameHandling(),
+    // Important: Also call our base class's do_special_frame_handling(),
     // to set the packet's timestamp:
     MultiFramedRTPSink::do_special_frame_handling(fragmentation_offset,
                                                   frame_start,
