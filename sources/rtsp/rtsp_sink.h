@@ -60,6 +60,7 @@ private:
     MediaAggregation *m_video, *m_audio;
     bool m_send_error;
     bool m_start_sink;
+    int32_t m_first_key_frame_timestamp;
 };
 
 }

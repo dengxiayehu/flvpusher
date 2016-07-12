@@ -11,7 +11,7 @@ H264Fragmenter::H264Fragmenter(xutil::Queue<xmedia::Frame *> * queue_src,
     m_duration_in_microseconds(0),
     m_nalu_index_in_parser(0),
     m_frame(NULL),
-    m_last_timestamp(-1)
+    m_last_timestamp(0)
 {
     m_presentation_time.tv_sec = m_presentation_time.tv_usec = 0;
 
@@ -44,10 +44,6 @@ void H264Fragmenter::get_next_frame(unsigned char *to, unsigned max_size,
 
             // Split the frame into nalus
             m_vparser.process(m_frame->m_dat, m_frame->m_dat_len);
-
-            if (m_last_timestamp == -1) {
-                m_last_timestamp = m_frame->m_ts;
-            }
         }
 
         unsigned frame_size = m_vparser.get_nalu_length(m_nalu_index_in_parser);

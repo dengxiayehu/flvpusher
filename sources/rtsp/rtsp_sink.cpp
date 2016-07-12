@@ -63,7 +63,8 @@ RtspSink::RtspSink(const std::string &flvpath) :
     m_last_track_id(0),
     m_video(new MediaAggregation), m_audio(new MediaAggregation),
     m_send_error(false),
-    m_start_sink(false)
+    m_start_sink(false),
+    m_first_key_frame_timestamp(0)
 {
     m_client = new RtspClient(NULL);
 }
@@ -142,6 +143,8 @@ int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
         if (!vparser.process(dat, length) &&
             vparser.is_key_frame() &&
             vparser.get_sps_length() && vparser.get_pps_length()) {
+            m_first_key_frame_timestamp = timestamp;
+
             TaskScheduler *scheduler = m_client->scheduler();
             m_video->rtp_socket = new RtpInterface(scheduler);
             m_video->sink = new H264VideoRTPSink(scheduler, m_video->rtp_socket, 96,
@@ -150,17 +153,18 @@ int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
             m_video->rtcp_socket = new RtpInterface(scheduler);
             m_video->rtcp = new Rtcp(scheduler, m_video->rtcp_socket, NULL, NULL);
             add_stream(m_video->sink, m_video->rtcp);
-
-            if (set_destination_and_play() < 0) {
-                LOGE("set_destination_and_play() failed");
-                return -1;
-            }
         }
     }
 
     if (!m_start_sink &&
-        timestamp > RTSP_SINK_BUFFERING_TIME) {
+        (timestamp - m_first_key_frame_timestamp) > RTSP_SINK_BUFFERING_TIME_AFTER_KEY_FRAME &&
+        m_video->sink) {
         m_start_sink = true;
+
+        if (set_destination_and_play() < 0) {
+            LOGE("set_destination_and_play() failed");
+            return -1;
+        }
     }
 
     return 0;
@@ -171,9 +175,6 @@ int RtspSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
     Frame *f = new Frame;
     f->make_frame(timestamp, dat, length, false);
     m_audio->queue.push(f);
-
-    if (!m_start_sink)
-        return 0;
 
     AutoLock l(m_mutex);
 
@@ -196,11 +197,6 @@ int RtspSink::send_audio(int32_t timestamp, byte *dat, uint32_t length)
             m_audio->rtcp_socket = new RtpInterface(scheduler);
             m_audio->rtcp = new Rtcp(scheduler, m_audio->rtcp_socket, NULL, NULL);
             add_stream(m_audio->sink, m_audio->rtcp);
-
-            if (set_destination_and_play() < 0) {
-                LOGE("set_destination_and_play() failed");
-                return -1;
-            }
         }
     }
 

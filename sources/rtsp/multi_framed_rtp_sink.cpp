@@ -28,7 +28,7 @@ MultiFramedRTPSink::MultiFramedRTPSink(TaskScheduler *scheduler,
     m_out_buf(NULL), m_cur_fragmentation_offset(0), m_previous_frame_ended_fragmentation(false),
     m_on_send_error_func(NULL), m_on_send_error_data(NULL),
     m_next_task(NULL),
-    m_last_audio_timestamp(-1)
+    m_last_audio_timestamp(0)
 {
     m_seq_num = 0;
     m_ssrc = random32();
@@ -304,10 +304,6 @@ void MultiFramedRTPSink::pack_frame()
             if (m_queue_src->pop(f) == 0) {
                 struct timeval presentation_time = { f->m_ts/1000, (f->m_ts%1000)*1000 };
                 memcpy(m_out_buf->cur_ptr(), f->m_dat+7, f->m_dat_len-7);
-
-                if (m_last_audio_timestamp == -1) {
-                    m_last_audio_timestamp = f->m_ts;
-                }
 
                 after_getting_frame(this, f->m_dat_len-7, 0,
                                     presentation_time, (f->m_ts - m_last_audio_timestamp)*1000);
