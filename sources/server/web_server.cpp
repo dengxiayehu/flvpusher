@@ -50,7 +50,7 @@ private:
     static int serve_request(struct mg_connection *conn);
     static int serve_auth(struct mg_connection *conn);
     static bool is_index(const char *uri);
-    static int serve_stream(TagType type, const string &uri, struct mg_connection *conn);
+    int serve_stream(TagType type, const string &uri, struct mg_connection *conn);
     int recycle(const char *root);
     static int recycle_func(void *opaque, const char *path);
 
@@ -270,62 +270,90 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
         return MG_FALSE;
     }
 
-    auto_ptr<File> info_file(new File);
-    if (!info_file->open(sprintf_("%s%c%s", STR(dir),
-                    DIRSEP, DEFAULT_HLS_INFO_FILE), "rb+"))
-        return -1;
-
     switch (type) {
     case ST_FILE_HLS:
         if (!is_file(uri)) {
             LOGE("!! %s not exists, pls prepare it first",
                  STR(uri));
         } else {
-            info_file->seek_to(1024 /* filename */ + 1 /* hls_time */);
-            info_file->writeui64(get_time_now());
-            info_file->flush();
+            File info_file;
+            if (!info_file.open(sprintf_("%s%c%s", STR(dir),
+                                         DIRSEP, DEFAULT_HLS_INFO_FILE),
+                                "rb+")) {
+                return -1;
+            }
+
+            AutoLock _l(m_mutex);
+
+            info_file.seek_to(1024 /* filename */ + 1 /* hls_time */);
+            info_file.writeui64(get_time_now());
         }
         return MG_FALSE;
 
     case ST_FILE_TS: {
-        string segment_lock_file(sprintf_("%s.lock", STR(uri)));
+        const char *p = strchr(STR(uri), '.');
+        for (char ch = *--p; isdigit(ch); ch = *--p);
+        ++p;
+        int ts_index = atoi(p);
+        string segment_lock_file(sprintf_("%s_%d.lock", STR(uri), ts_index));
+        bool need_generate = false;
+        bool need_wait = false;
 
+        BEGIN
+        AutoLock _l(m_mutex);
         if (!is_file(uri)) {
-            system_(STR(sprintf_("touch %s", STR(segment_lock_file))));
+            if (is_file(segment_lock_file)) {
+                need_wait = true;
+            } else {
+                system_(STR(sprintf_("touch %s", STR(segment_lock_file))));
+                need_generate = true;
+            }
+        } else if (is_file(segment_lock_file)) {
+            need_wait = true;
+        }
+        END
 
-            LOGD("%s not exists, generate it now ..",
-                 STR(uri));
-
-            const char *ptspath = STR(uri);
-            const char *p = strchr(ptspath, '.');
-            int ndigits = 0;
-            for (char ch = *--p; isdigit(ch); ch = *--p, ++ndigits);
-            ++p;
-
+        if (need_generate) {
             char media_file[1024];
             uint8_t hls_time;
-            info_file->seek_begin();
-            info_file->read_buffer((uint8_t *) media_file, sizeof(media_file));
-            info_file->readui8(&hls_time);
+
+            BEGIN
+            File info_file;
+            if (!info_file.open(sprintf_("%s%c%s", STR(dir),
+                                         DIRSEP, DEFAULT_HLS_INFO_FILE),
+                                "rb")) {
+                return -1;
+            }
+            info_file.read_buffer((uint8_t *) media_file, sizeof(media_file));
+            info_file.readui8(&hls_time);
+            END
+
+            LOGD("Generating %s ..", STR(uri));
+
             auto_ptr<HLSSegmenter> hls_segmenter(
-                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-ptspath, ptspath), hls_time));
+                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-STR(uri), STR(uri)), hls_time));
             if (hls_segmenter->set_file(media_file) < 0) {
                 LOGE("HLSSegmenter load file \"%s\" failed",
                      STR(media_file));
                 return MG_FALSE;
             }
-            hls_segmenter->create_segment(atoi(p));
+            hls_segmenter->create_segment(ts_index);
 
             LOGD("%s done", STR(uri));
 
+            AutoLock _l(m_mutex);
             rm_(segment_lock_file);
             return MG_FALSE;
-        } else {
-            while (is_file(segment_lock_file)) {
-                LOGD("%s generating, wait");
+        }
+
+        if (need_wait) {
+            while (!m_quit &&
+                   is_file(segment_lock_file)) {
+                LOGD("Wait for %s ..", STR(uri));
                 sleep_(DEFAULT_WAIT_SEGMENT_DONE);
             }
         }
+
         LOGD("%s reused", STR(uri));
         } return MG_FALSE;
 
