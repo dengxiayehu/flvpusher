@@ -349,6 +349,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
     HLSInfo *info = &m_info;
     AVRational tb = (AVRational) {1, 1000};
     TSMuxer *tsmuxer = new TSMuxer;
+    bool got_frame = false;
     if (m_mf == MP4) {
         MP4Parser::ReadStatus rs[MP4Parser::NB_TRACK];
 
@@ -374,10 +375,12 @@ int HLSSegmenter::create_segment(uint32_t idx)
             int64_t end_pts = m_hls_time * AV_TIME_BASE * (idx + 1);
             if (is_video &&
                 is_key &&
-                av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
+                av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0 &&
+                got_frame) {
                 SAFE_FREE(pkt->data);
                 break;
             }
+            got_frame = true;
             tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, is_video);
             SAFE_FREE(pkt->data);
         }
@@ -458,12 +461,14 @@ int HLSSegmenter::create_segment(uint32_t idx)
             int64_t end_pts = m_hls_time * AV_TIME_BASE * (idx + 1);
             if (is_video &&
                 is_key &&
-                av_compare_ts(pkt_pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
+                av_compare_ts(pkt_pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0 &&
+                got_frame) {
                 m_quit = true;
                 goto done;
             }
             END
 
+            got_frame = true;
             tsmuxer->write_frame(pkt_pts, pkt_data, pkt_size, is_video);
 done:
             u.flv.parser->free_tag(tag);
