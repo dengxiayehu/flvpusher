@@ -127,8 +127,9 @@ int App::parse_arg(int argc, char *argv[])
         {"help",            required_argument, NULL, 'h'},
         {"dvfile",          required_argument, NULL, 'v'},
         {"dafile",          required_argument, NULL, 'a'},
-        {"hls_playlist",    required_argument, NULL, 'S'},
+        {"hls_playlist",    required_argument, NULL, 'p'},
         {"hls_time",        required_argument, NULL, 't'},
+        {"hls_segment",     required_argument, NULL, 'S'},
         {"loop",            no_argument,       NULL, 'T'},
         {"tspath",          required_argument, NULL, 's'},
         {"flvpath",         required_argument, NULL, 'f'},
@@ -139,7 +140,7 @@ int App::parse_arg(int argc, char *argv[])
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tS:s:Tt:Nf:wW;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tp:s:S:Tt:Nf:wW;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -150,23 +151,25 @@ int App::parse_arg(int argc, char *argv[])
             break;
 
         case 'v':
-            if (is_file(optarg))
-                rm_(optarg);
+            if (is_file(optarg)) rm_(optarg);
             m_dvfile = optarg;
             break;
 
         case 'a':
-            if (is_file(optarg))
-                rm_(optarg);
+            if (is_file(optarg)) rm_(optarg);
             m_dafile = optarg;
             break;
 
-        case 'S':
+        case 'p':
             m_hls_playlist = optarg;
             break;
 
         case 't':
             m_hls_time = atoi(optarg);
+            break;
+
+        case 'S':
+            m_req_segment = optarg;
             break;
 
         case 'T':
@@ -225,6 +228,10 @@ int App::parse_arg(int argc, char *argv[])
 
 int App::check_arg() const
 {
+    if (!m_req_segment.empty()) {
+        return 0;
+    }
+
     if (m_webserver) {
         return 0;
     }
@@ -251,8 +258,54 @@ int App::check_arg() const
 
 void App::usage() const
 {
-    fprintf(stderr, "Usage: flvpusher <-i media_file|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time] [--hls_list_size size]> [-h] [--no_logfile]\n");
-    fprintf(stderr, "Version: %d\n", VERSION);
+    fprintf(stderr, "flvpusher (V: %d)\n\n"
+                    "Usage: flvpusher <-i source|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time]> [-h] [--no_logfile]\n"
+                    "Description: \n"
+                    "-i, --input\n"
+                    "       input source, file category: *.flv, *.mp4, *.3gp, *.ts\n"
+                    "                     protocol category: rtmp://*, rtsp://*, http://*.m3u8\n"
+                    "-L, --live\n"
+                    "       liveurl, inject audio&video to rtmp-server or rtsp-server,\n"
+                    "       format: rtmp://<ip>[:port]/live/<rtmp-stream-name>\n"
+                    "               rtsp://<ip>[:port]/<rtsp-sdp-name>.sdp\n"
+                    "       note: this option is exclusive with -p and -w\n"
+                    "-p, --hls_playlist\n"
+                    "       pre-process flv or mp4 file to generate *.m3u8, *.m3u8.seek and hls_info.txt for dynamic hls vod\n"
+                    "       note: this option is exclusive with -L and -w\n"
+                    "-t, --hls_time\n"
+                    "       specify the ts-segment's duration in hls vod\n"
+                    "-w, --webserver\n"
+                    "       start webserver\n"
+                    "       note: this option is exclusive with -L and -p\n"
+                    "-T, --loop\n"
+                    "       if input source is done, start it over again\n"
+                    "-N, --no_logfile\n"
+                    "       do NOT generate log file, run this program in slience\n"
+                    "-v, --dvfile\n"
+                    "       dump raw video into file (format: H.264)\n"
+                    "-a, --dafile\n"
+                    "       dump raw audio into file (format: AAC)\n"
+                    "-f, --flvpath\n"
+                    "       dump video&audio into flv\n"
+                    "-s, --tspath\n"
+                    "       dump video&audio into ts\n"
+                    "-h, --help\n"
+                    "       show this help message and quit\n\n\n"
+                    "Sample:\n"
+                    "1. stream mp4 to rtmpserver (other input sources are the same)\n"
+                    "$ flvpusher -i ~/Video/omn.mp4 -L rtmp://127.0.0.1:1935/live/va\n\n"
+                    "2. stream mp4 to rtspserver (ditto)\n"
+                    "$ flvpusher -i ~/Video/omn.mp4 -L rtsp://192.168.119.1/va.sdp\n\n"
+                    "3. pre-process mp4 to prepare for hls dynamic vod\n"
+                    "$ flvpusher -i ~/Video/omn.mp4 --hls_playlist html/omn/omn.m3u8 --hls_time 5\n\n"
+                    "4. start webserver for hls vod\n"
+                    "$ flvpusher -w\n"
+                    "note: a. webserver server's root directory is default to ./html\n"
+                    "      b. webserver server's port is default to 9877\n"
+                    "      c. use player(e.g. vlc) to play this hls vod: http://<this-server-ip:9877>/omn/omn.m3u8\n"
+                    "      d. you can modify root directory and listen port in flvpusher_cfg.txt, and put it in the same\n"
+                    "         directory with this tool\n"
+                    , VERSION);
 }
 
 int App::prepare()

@@ -63,6 +63,7 @@ private:
     int m_hls_time;
     int m_hls_list_size;
     bool m_loop;
+    std::string m_req_segment;
     std::string m_tspath;
     std::string m_flvpath;
 
