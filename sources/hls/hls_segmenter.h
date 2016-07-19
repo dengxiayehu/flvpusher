@@ -26,6 +26,9 @@ public:
 
     void ask2quit();
 
+public:
+    static int create_segment(const std::string &req_segment);
+
 private:
     enum MediaFormat { UNSUPPORTED, FLV, MP4 };
 

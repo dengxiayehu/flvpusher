@@ -338,6 +338,10 @@ int App::main(int argc, char *argv[])
         return 1;
     }
 
+    if (!m_req_segment.empty()) {
+        return HLSSegmenter::create_segment(m_req_segment);
+    }
+
     int ret = 0;
 
     if (m_webserver) {

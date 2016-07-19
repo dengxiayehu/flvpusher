@@ -484,4 +484,79 @@ const std::string HLSSegmenter::get_seek_filename() const
                     STR(dirname_(m_hls_playlist)), STR(basename_(m_hls_playlist)));
 }
 
+int HLSSegmenter::create_segment(const std::string &req_segment)
+{
+    string dir(dirname_(req_segment));
+    string hls_info_path(dir + "/hls_info.txt");
+    if (!is_file(hls_info_path) && !is_file(req_segment)) {
+        LOGE("%s isn't a hls vod dir", STR(dir));
+        return -1;
+    }
+
+    const char *p = strchr(STR(req_segment), '.');
+    for (char ch = *--p; isdigit(ch); ch = *--p);
+    ++p;
+    int ts_index = atoi(p);
+    string segment_lock_file(sprintf_("%s_%d.lock", STR(req_segment), ts_index));
+    bool need_generate = false;
+    bool need_wait = false;
+
+    BEGIN
+    AutoFileLock _l(hls_info_path);
+    if (!is_file(req_segment)) {
+        if (is_file(segment_lock_file)) {
+            need_wait = true;
+        } else {
+            system_(STR(sprintf_("touch %s", STR(segment_lock_file))));
+            need_generate = true;
+        }
+    } else if (is_file(segment_lock_file)) {
+        need_wait = true;
+    }
+    END
+
+    if (need_generate) {
+        char media_file[1024];
+        uint8_t hls_time;
+
+        BEGIN
+        File info_file;
+        if (!info_file.open(hls_info_path, "rb")) {
+            return -1;
+        }
+        info_file.read_buffer((uint8_t *) media_file, sizeof(media_file));
+        info_file.readui8(&hls_time);
+        END
+
+        LOGD("Generating %s ..", STR(req_segment));
+
+        auto_ptr<HLSSegmenter> hls_segmenter(
+                new HLSSegmenter(sprintf_("%.*s.m3u8",
+                                          p-STR(req_segment), STR(req_segment)),
+                                 hls_time));
+        if (hls_segmenter->set_file(media_file) < 0) {
+            LOGE("HLSSegmenter load file \"%s\" failed",
+                 STR(media_file));
+            return -1;
+        }
+        hls_segmenter->create_segment(ts_index);
+
+        LOGD("%s done", STR(req_segment));
+
+        AutoFileLock _l(hls_info_path);
+        rm_(segment_lock_file);
+        return 0;
+    }
+
+    if (need_wait) {
+        while (is_file(segment_lock_file)) {
+            LOGD("Wait for %s ..", STR(req_segment));
+            sleep_(DEFAULT_WAIT_SEGMENT_DONE);
+        }
+    }
+
+    LOGD("%s reused", STR(req_segment));
+    return 0;
+}
+
 }
