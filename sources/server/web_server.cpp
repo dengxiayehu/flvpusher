@@ -291,7 +291,7 @@ int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_conne
         return MG_FALSE;
 
     case ST_FILE_TS: {
-        const char *p = strchr(STR(uri), '.');
+        const char *p = strrchr(STR(uri), '.');
         for (char ch = *--p; isdigit(ch); ch = *--p);
         ++p;
         int ts_index = atoi(p);

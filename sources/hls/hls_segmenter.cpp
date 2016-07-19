@@ -493,7 +493,7 @@ int HLSSegmenter::create_segment(const std::string &req_segment)
         return -1;
     }
 
-    const char *p = strchr(STR(req_segment), '.');
+    const char *p = strrchr(STR(req_segment), '.');
     for (char ch = *--p; isdigit(ch); ch = *--p);
     ++p;
     int ts_index = atoi(p);
