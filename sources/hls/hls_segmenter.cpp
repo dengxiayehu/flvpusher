@@ -59,7 +59,8 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
         system_("mkdir -p \"%s\" 2>/dev/null", STR(dir));
 
     int ret = 0;
-    if (end_with(filename, ".mp4") || end_with(filename, ".3gp")) {
+    if (end_with(filename, ".mp4") ||
+        end_with(filename, ".3gp") || end_with(filename, ".3gpp")) {
         m_mf = MP4;
         u.mp4.parser = new MP4Parser;
         if (u.mp4.parser->set_file(filename) < 0) {
