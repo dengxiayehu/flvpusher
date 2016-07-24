@@ -266,96 +266,21 @@ int WebServerImpl::serve_request(struct mg_connection *conn)
 int WebServerImpl::serve_stream(TagType type, const string &uri, struct mg_connection *conn)
 {
     string dir(dirname_(uri));
+    // Make sure the parent folder exists
     if (!is_dir(dir)) {
         return MG_FALSE;
     }
 
     switch (type) {
     case ST_FILE_HLS:
-        if (!is_file(uri)) {
-            LOGE("!! %s not exists, pls prepare it first",
-                 STR(uri));
-        } else {
-            File info_file;
-            if (!info_file.open(sprintf_("%s%c%s", STR(dir),
-                                         DIRSEP, DEFAULT_HLS_INFO_FILE),
-                                "rb+")) {
-                return -1;
-            }
-
-            AutoLock _l(m_mutex);
-
-            info_file.seek_to(1024 /* filename */ + 1 /* hls_time */);
-            info_file.writeui64(get_time_now());
-        }
+        // Update access time in corresponding hls_info.txt, the time will be used
+        // in cleanup expired ts-segments routine
+        HLSSegmenter::access_m3u8(uri);
         return MG_FALSE;
 
-    case ST_FILE_TS: {
-        const char *p = strrchr(STR(uri), '.');
-        for (char ch = *--p; isdigit(ch); ch = *--p);
-        ++p;
-        int ts_index = atoi(p);
-        string segment_lock_file(sprintf_("%s_%d.lock", STR(uri), ts_index));
-        bool need_generate = false;
-        bool need_wait = false;
-
-        BEGIN
-        AutoLock _l(m_mutex);
-        if (!is_file(uri)) {
-            if (is_file(segment_lock_file)) {
-                need_wait = true;
-            } else {
-                system_(STR(sprintf_("touch %s", STR(segment_lock_file))));
-                need_generate = true;
-            }
-        } else if (is_file(segment_lock_file)) {
-            need_wait = true;
-        }
-        END
-
-        if (need_generate) {
-            char media_file[1024];
-            uint8_t hls_time;
-
-            BEGIN
-            File info_file;
-            if (!info_file.open(sprintf_("%s%c%s", STR(dir),
-                                         DIRSEP, DEFAULT_HLS_INFO_FILE),
-                                "rb")) {
-                return -1;
-            }
-            info_file.read_buffer((uint8_t *) media_file, sizeof(media_file));
-            info_file.readui8(&hls_time);
-            END
-
-            LOGD("Generating %s ..", STR(uri));
-
-            auto_ptr<HLSSegmenter> hls_segmenter(
-                    new HLSSegmenter(sprintf_("%.*s.m3u8", p-STR(uri), STR(uri)), hls_time));
-            if (hls_segmenter->set_file(media_file) < 0) {
-                LOGE("HLSSegmenter load file \"%s\" failed",
-                     STR(media_file));
-                return MG_FALSE;
-            }
-            hls_segmenter->create_segment(ts_index);
-
-            LOGD("%s done", STR(uri));
-
-            AutoLock _l(m_mutex);
-            rm_(segment_lock_file);
-            return MG_FALSE;
-        }
-
-        if (need_wait) {
-            while (!m_quit &&
-                   is_file(segment_lock_file)) {
-                LOGD("Wait for %s ..", STR(uri));
-                sleep_(DEFAULT_WAIT_SEGMENT_DONE);
-            }
-        }
-
-        LOGD("%s reused", STR(uri));
-        } return MG_FALSE;
+    case ST_FILE_TS:
+        HLSSegmenter::create_segment(uri);
+        return MG_FALSE;
 
     default:
         break;

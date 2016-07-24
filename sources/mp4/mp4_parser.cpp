@@ -10,6 +10,7 @@ namespace flvpusher {
 
 MP4Parser::MP4Parser() :
     m_box(NULL),
+    m_parsed_track(0),
     m_mp4(NULL)
 {
 }
@@ -117,6 +118,11 @@ int MP4Parser::init_tracks_from_box(Box *box, Track *&trak)
     Box *p = box;
     while (p != NULL) {
         if (p->typ == MKTAG4('t', 'k', 'h', 'd')) {
+            if (++m_parsed_track > NB_TRACK) {
+                // Already got first NB_TRACK tracks' info
+                break;
+            }
+
             TrackHeaderBox *tkhd = (TrackHeaderBox *) p;
             // Update track index to init
             if (tkhd->volume != 0) {
@@ -564,6 +570,6 @@ void MP4Parser::print_ReadStatus(const ReadStatus &rs)
          rs.cnt_offset, rs.delta_offset, rs.pts.num, rs.pts.den, rs.shift_time, rs.sample_idx, rs.lcc.cached_sample_idx, rs.lcc.cached_entry_idx, rs.lcc.cached_total_samples, rs.sample_offset);
 }
 
-InputFormat MP4Parser::mp4_demuxer = { "mp4|3gp", sizeof(MP4Context), mp4_read_packet };
+InputFormat MP4Parser::mp4_demuxer = { "mp4|3gp|3gpp", sizeof(MP4Context), mp4_read_packet };
 
 }

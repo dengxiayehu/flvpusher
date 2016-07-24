@@ -16,6 +16,9 @@
 using namespace xutil;
 using namespace std;
 
+#define HLS_URI_SEPERATOR "_dxyh_"
+#define SEGMENT_TEMPNAME_SUFFIX ".flvpusher"
+
 namespace flvpusher {
 
 HLSSegmenter::HLSInfo::HLSInfo()
@@ -83,7 +86,7 @@ int HLSSegmenter::set_file(const string &filename, bool loop)
     }
     
     BEGIN
-    const char *pattern = "%d.ts";
+    const char *pattern = HLS_URI_SEPERATOR "%d.ts";
     int basename_size = strlen(STR(m_hls_playlist)) + strlen(pattern) + 1;
     char buf[PATH_MAX] = {0};
     strncpy(buf, STR(m_hls_playlist), basename_size);
@@ -350,6 +353,9 @@ int HLSSegmenter::create_segment(uint32_t idx)
     AVRational tb = (AVRational) {1, 1000};
     TSMuxer *tsmuxer = new TSMuxer;
     bool got_frame = false;
+    string segment_path(sprintf_(STR(info->basenm), idx));
+    // Mux data with this tempname, then |rename| it to segment_path
+    string segment_tmp(segment_path + SEGMENT_TEMPNAME_SUFFIX);
     if (m_mf == MP4) {
         MP4Parser::ReadStatus rs[MP4Parser::NB_TRACK];
 
@@ -362,7 +368,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
         memcpy(u.mp4.parser->m_status, rs, sizeof(rs));
 
         Packet pkt1, *pkt = &pkt1;
-        tsmuxer->set_file(sprintf_(STR(info->basenm), idx),
+        tsmuxer->set_file(segment_tmp,
                           u.mp4.parser->get_vtime_base());
         while (!m_quit &&
                !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
@@ -404,7 +410,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
             return -1;
         u.flv.parser->m_file.seek_to(rs[0].file_offset);
 
-        tsmuxer->set_file(sprintf_(STR(info->basenm), idx),
+        tsmuxer->set_file(segment_tmp,
                           (AVRational) {1001, 30000});
 
         while (!m_quit && !u.flv.parser->eof()) {
@@ -474,8 +480,19 @@ done:
             u.flv.parser->free_tag(tag);
         }
     }
+
+    // Do the |rename| now
+    int ret = 0;
+    if (rename(STR(segment_tmp), STR(segment_path)) != 0) {
+        LOGE("Rename segment_tmp \"%s\" to \"%s\" failed: %s",
+             STR(segment_tmp), STR(segment_path),
+             ERRNOMSG);
+        unlink(STR(segment_tmp));
+        ret = -1;
+    }
+
     SAFE_DELETE(tsmuxer);
-    return 0;
+    return ret;
 }
 
 const std::string HLSSegmenter::get_seek_filename() const
@@ -486,36 +503,40 @@ const std::string HLSSegmenter::get_seek_filename() const
 
 int HLSSegmenter::create_segment(const std::string &req_segment)
 {
-    string dir(dirname_(req_segment));
-    string hls_info_path(dir + "/hls_info.txt");
-    if (!is_file(hls_info_path) && !is_file(req_segment)) {
-        LOGE("%s isn't a hls vod dir", STR(dir));
-        return -1;
+    // If requested segment exists, we are done
+    if (is_file(req_segment)) {
+        return 0;
     }
 
-    const char *p = strrchr(STR(req_segment), '.');
-    for (char ch = *--p; isdigit(ch); ch = *--p);
-    ++p;
-    int ts_index = atoi(p);
-    string segment_lock_file(sprintf_("%s_%d.lock", STR(req_segment), ts_index));
-    bool need_generate = false;
-    bool need_wait = false;
-
+    string segment_lock_file(
+            sprintf_("%s.lock", STR(req_segment)));
     BEGIN
-    AutoFileLock _l(hls_info_path);
-    if (!is_file(req_segment)) {
-        if (is_file(segment_lock_file)) {
-            need_wait = true;
-        } else {
-            system_(STR(sprintf_("touch %s", STR(segment_lock_file))));
-            need_generate = true;
-        }
-    } else if (is_file(segment_lock_file)) {
-        need_wait = true;
-    }
-    END
+    AutoFileLock _l(segment_lock_file);
 
-    if (need_generate) {
+    if (!is_file(req_segment)) { // need to check again, if one process already
+                                 // create this segment, we do nothing
+        string dir(dirname_(req_segment));
+        string hls_info_path(dir + "/hls_info.txt");
+        if (!is_file(hls_info_path) && !is_file(req_segment)) {
+            LOGE("%s isn't a hls vod dir", STR(dir));
+            return -1;
+        }
+
+        // Get ts-segment's index
+        const char *p = strrchr(STR(req_segment), '.');
+        for (char ch = *--p; isdigit(ch); ch = *--p);
+        ++p;
+        int ts_index = atoi(p);
+
+        // Continue to back-skip HLS_URI_SEPERATOR
+        int hls_uri_seperator_len = strlen(HLS_URI_SEPERATOR);
+        if (strncmp(p - hls_uri_seperator_len, HLS_URI_SEPERATOR,
+                    hls_uri_seperator_len) != 0) {
+            LOGE("Bad ts_segemnt request \"%s\"", STR(req_segment));
+            return -1;
+        }
+        p -= hls_uri_seperator_len;
+
         char media_file[1024];
         uint8_t hls_time;
 
@@ -528,7 +549,7 @@ int HLSSegmenter::create_segment(const std::string &req_segment)
         info_file.readui8(&hls_time);
         END
 
-        LOGD("Generating %s ..", STR(req_segment));
+        uint64_t generate_start_time = get_time_now();
 
         auto_ptr<HLSSegmenter> hls_segmenter(
                 new HLSSegmenter(sprintf_("%.*s.m3u8",
@@ -541,21 +562,32 @@ int HLSSegmenter::create_segment(const std::string &req_segment)
         }
         hls_segmenter->create_segment(ts_index);
 
-        LOGD("%s done", STR(req_segment));
+        LOGD("Generate \"%s\" done (%dms used)",
+             STR(req_segment), get_time_now() - generate_start_time);
+    }
+    END
 
-        AutoFileLock _l(hls_info_path);
-        rm_(segment_lock_file);
-        return 0;
+    unlink(STR(segment_lock_file));
+    return 0;
+}
+
+int HLSSegmenter::access_m3u8(const std::string &req_m3u8)
+{
+    string dir(dirname_(req_m3u8));
+    string hls_info_path(dir + "/hls_info.txt");
+    if (!is_file(hls_info_path) && !is_file(req_m3u8)) {
+        LOGE("%s isn't a hls vod dir", STR(dir));
+        return -1;
     }
 
-    if (need_wait) {
-        while (is_file(segment_lock_file)) {
-            LOGD("Wait for %s ..", STR(req_segment));
-            sleep_(DEFAULT_WAIT_SEGMENT_DONE);
-        }
+    AutoFileLock _l(hls_info_path);
+    File info_file;
+    if (!info_file.open(sprintf_("%s%c%s", STR(dir), DIRSEP, DEFAULT_HLS_INFO_FILE),
+                        "rb+")) {
+        return -1;
     }
-
-    LOGD("%s reused", STR(req_segment));
+    info_file.seek_to(1024 /* filename */ + 1 /* hls_time */);
+    info_file.writeui64(get_time_now());
     return 0;
 }
 

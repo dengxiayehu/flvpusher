@@ -28,6 +28,7 @@ public:
 
 public:
     static int create_segment(const std::string &req_segment);
+    static int access_m3u8(const std::string &req_m3u8);
 
 private:
     enum MediaFormat { UNSUPPORTED, FLV, MP4 };

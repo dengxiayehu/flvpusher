@@ -96,8 +96,11 @@ private:
 private:
     xfile::File m_file;
     Box *m_box;
+    // We only cover first two tracks, normally video and audio
+    // tracks (hope so)
     Track m_track[NB_TRACK];
     ReadStatus m_status[NB_TRACK];
+    int m_parsed_track;
 
 /////////////////////////////////////////////////////////////
     

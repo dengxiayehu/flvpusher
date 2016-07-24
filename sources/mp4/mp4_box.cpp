@@ -5,6 +5,7 @@
 #include <xlog.h>
 
 //#define XDEBUG
+//#define XDEBUG_FULL
 
 namespace flvpusher {
 
@@ -186,8 +187,8 @@ int Box::parse_box(Box *&pb, File *f, off_t curend)
                 pb->lnk_next(pcb);
         } else {
 #ifdef XDEBUG
-            LOGW("Unsupported box type: %s, size=%u",
-                    typ_str(typ), sz);
+            LOGW("Unsupported box type: %s, size=%u (skipped)",
+                 typ_str(typ), sz);
 #endif
 
 skip:
@@ -1346,10 +1347,12 @@ int TimeToSampleBox::init(File *f)
 
 #ifdef XDEBUG
     printf("entry_count: %u\n", entry_count);
+#if XDEBUG_FULL
     for (uint32_t i = 0; i < entry_count; ++i) {
         printf("sample_count: %u\n", sample_count[i]);
         printf("sample_delta: %u\n", sample_delta[i]);
     }
+#endif
 #endif
 
     SAFE_DELETE_ARRAY(tmp);
@@ -1402,9 +1405,11 @@ int SyncSampleBox::init(File *f)
 
 #ifdef XDEBUG
     printf("entry_count: %u\n", entry_count);
+#if XDEBUG_FULL
     for (uint32_t i = 0; i < entry_count; ++i) {
         printf("sample_number: 0x%08x\n", sample_number[i]);
     }
+#endif
 #endif
 
     SAFE_DELETE_ARRAY(tmp);
@@ -1469,11 +1474,13 @@ int SampleToChunkBox::init(File *f)
 
 #ifdef XDEBUG
     printf("entry_count: %u\n", entry_count);
+#if XDEBUG_FULL
     for (uint32_t i = 0; i < entry_count; ++i) {
         printf("first_chunk: %u\n", first_chunk[i]);
         printf("sample_per_chunk: %u\n", sample_per_chunk[i]);
         printf("sample_description_index: %u\n", sample_description_index[i]);
     }
+#endif
 #endif
 
     SAFE_DELETE_ARRAY(tmp);
@@ -1539,11 +1546,13 @@ int SampleSizeBox::init(File *f)
 #ifdef XDEBUG
     printf("sample_size: %u\n", sample_size);
     printf("sample_count: %u\n", sample_count);
+#if XDEBUG_FULL
     if (!sample_size) {
         for (uint32_t i = 0; i < sample_count; ++i) {
             printf("entry_size: 0x%08x\n", entry_size[i]);
         }
     }
+#endif
 #endif
 
     return 0;
@@ -1595,9 +1604,11 @@ int ChunkOffsetBox::init(File *f)
 
 #ifdef XDEBUG
     printf("entry_count: %u\n", entry_count);
+#if XDEBUG_FULL
     for (uint32_t i = 0; i < entry_count; ++i) {
         printf("chunk_offset: 0x%08x\n", chunk_offset[i]);
     }
+#endif
 #endif
 
     SAFE_DELETE_ARRAY(tmp);
@@ -1650,9 +1661,11 @@ int ChunkLargeOffsetBox::init(File *f)
 
 #ifdef XDEBUG
     printf("entry_count: %u\n", entry_count);
+#if XDEBUG_FULL
     for (uint32_t i = 0; i < entry_count; ++i) {
         printf("chunk_offset: 0x%016lx\n", chunk_offset[i]);
     }
+#endif
 #endif
 
     SAFE_DELETE_ARRAY(tmp);

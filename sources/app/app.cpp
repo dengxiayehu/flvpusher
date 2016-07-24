@@ -262,7 +262,7 @@ void App::usage() const
                     "Usage: flvpusher <-i source|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time]> [-h] [--no_logfile]\n"
                     "Description: \n"
                     "-i, --input\n"
-                    "       input source, file category: *.flv, *.mp4, *.3gp, *.ts\n"
+                    "       input source, file category: *.flv, *.mp4, *.3gp *.3gpp, *.ts\n"
                     "                     protocol category: rtmp://*, rtsp://*, http://*.m3u8\n"
                     "-L, --live\n"
                     "       liveurl, inject audio&video to rtmp-server or rtsp-server,\n"
@@ -404,7 +404,7 @@ int App::main(int argc, char *argv[])
                 m_pusher = new RtspSource(*it, m_sink);
             } else if (end_with(*it, ".flv")) {
                 m_pusher = new FLVPusher(*it, m_sink);
-            } else if (end_with(*it, ".mp4") || end_with(*it, ".3gp")) {
+            } else if (end_with(*it, ".mp4") || end_with(*it, ".3gp") || end_with(*it, ".3gpp")) {
 #if defined (VERSION) && (VERSION > 1)
                 m_pusher = new MP4Pusher1(*it, m_sink);
 #else
