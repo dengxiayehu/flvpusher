@@ -130,6 +130,7 @@ int App::parse_arg(int argc, char *argv[])
         {"hls_playlist",    required_argument, NULL, 'p'},
         {"hls_time",        required_argument, NULL, 't'},
         {"hls_segment",     required_argument, NULL, 'S'},
+        {"hls_m3u8",        required_argument, NULL, 'm'},
         {"loop",            no_argument,       NULL, 'T'},
         {"tspath",          required_argument, NULL, 's'},
         {"flvpath",         required_argument, NULL, 'f'},
@@ -140,7 +141,7 @@ int App::parse_arg(int argc, char *argv[])
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tp:s:S:Tt:Nf:wW;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tp:s:S:m:Tt:Nf:wW;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -166,6 +167,10 @@ int App::parse_arg(int argc, char *argv[])
 
         case 't':
             m_hls_time = atoi(optarg);
+            break;
+
+        case 'm':
+            m_req_m3u8 = optarg;
             break;
 
         case 'S':
@@ -228,7 +233,8 @@ int App::parse_arg(int argc, char *argv[])
 
 int App::check_arg() const
 {
-    if (!m_req_segment.empty()) {
+    if (!m_req_segment.empty() ||
+        !m_req_m3u8.empty()) {
         return 0;
     }
 
@@ -338,6 +344,9 @@ int App::main(int argc, char *argv[])
         return 1;
     }
 
+    if (!m_req_m3u8.empty()) {
+        return HLSSegmenter::access_m3u8(m_req_m3u8);
+    }
     if (!m_req_segment.empty()) {
         return HLSSegmenter::create_segment(m_req_segment);
     }
