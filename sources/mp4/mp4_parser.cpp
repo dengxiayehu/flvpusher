@@ -80,10 +80,15 @@ int MP4Parser::init()
                  trak->esds->samplerate_idx, trak->esds->channel,
                  samplerate_idx, trak->mp4a->channelcount);
 #endif
+#if 0
             // |mp4a| wins
             generate_asc(trak->esds->asc,
                          trak->esds->audio_object_type,
                          samplerate_idx, trak->mp4a->channelcount);
+#else
+            // Use the asc in |esds| by default
+            LOGW("AudioSpecificConfig in |esds| is different from |mp4a|");
+#endif
         }
     }
     frac_init(&rstatus->pts, 0, 0, trak->timescale);

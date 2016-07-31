@@ -1897,6 +1897,9 @@ int esdsBox::init(File *f)
     // Generate AudioSpecificConfig
     generate_asc(asc,
             audio_object_type, samplerate_idx, channel);
+#ifdef XDEBUG
+    print_asc(asc);
+#endif
 
 out:
     SAFE_DELETE_ARRAY(tmp);
