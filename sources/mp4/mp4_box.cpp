@@ -75,6 +75,11 @@ int Box::parse_box(Box *&pb, File *f, off_t curend)
                 LOGE("Read box's largesize failed");
                 goto skip;
             }
+        } else if (sz > (f->size() - cursave)) {
+            uint32_t sz_adjust = f->size() - cursave;
+            LOGW("Box |%s| with too large size(%u), adjust it to %u",
+                 typ_str(typ), sz, sz_adjust);
+            sz = sz_adjust;
         }
 
         if (curend == -1) { // Parse only one box
