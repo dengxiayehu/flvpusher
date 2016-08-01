@@ -134,6 +134,7 @@ int App::parse_arg(int argc, char *argv[])
         {"loop",            no_argument,       NULL, 'T'},
         {"tspath",          required_argument, NULL, 's'},
         {"flvpath",         required_argument, NULL, 'f'},
+        {"logpath",         required_argument, NULL, 'l'},
         {"no_logfile",      no_argument,       NULL, 'N'},
         {"webserver",       no_argument,       NULL, 'w'},
         {0, 0, 0, 0}
@@ -141,7 +142,7 @@ int App::parse_arg(int argc, char *argv[])
     int ch;
     bool no_logfile = false;
 
-    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tp:s:S:m:Tt:Nf:wW;", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, ":i:L:hv:a:tp:s:S:m:Tt:l:Nf:wW;", longopts, NULL)) != -1) {
         switch (ch) {
         case 'i':
             m_input_str = optarg;
@@ -191,6 +192,10 @@ int App::parse_arg(int argc, char *argv[])
             m_flvpath = optarg;
             break;
 
+        case 'l':
+            m_logpath = optarg;
+            break;
+
         case 'N':
             no_logfile = true;
             break;
@@ -216,8 +221,12 @@ int App::parse_arg(int argc, char *argv[])
     }
 
     if (!no_logfile) {
-        if (xlog::log_add_dst(STR(sprintf_("%s/flvpusher_log_%d.txt",
-                                           LOG_DIR, getpid()))) != SUCCESS) {
+        if (m_logpath.empty()) {
+            // Store log in default path
+            m_logpath = sprintf_("%s/flvpusher_log_%d.txt", LOG_DIR, getpid());
+        }
+
+        if (xlog::log_add_dst(STR(m_logpath)) != SUCCESS) {
             fprintf(stderr, "Init xlog system failed\n");
             return -1;
         }

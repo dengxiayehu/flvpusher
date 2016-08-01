@@ -67,6 +67,7 @@ private:
     std::string m_req_segment;
     std::string m_tspath;
     std::string m_flvpath;
+    std::string m_logpath;
 
     MediaSink *m_sink;
     MediaPusher *m_pusher;
