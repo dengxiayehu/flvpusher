@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 # prepare_vod.sh
 # prepare for flvpusher's dynamic vod with input mp4|flv file
 # usage: prepare_vod.sh <webserver's root dir> <input mp4|flv> [flvpusher tool path]
