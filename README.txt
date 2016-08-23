@@ -67,4 +67,3 @@ Other
 ====================
 Any further information please contact me.
 mail: dengxiayehu@yeah.net
-QQ: 947980562
