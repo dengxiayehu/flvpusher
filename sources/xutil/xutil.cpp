@@ -5,7 +5,6 @@
 #include <sstream>
 
 #include <cstdlib>
-#include <fcntl.h>
 #include <libgen.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -962,9 +961,12 @@ IOBuffer::operator std::string()
 
 /////////////////////////////////////////////////////////////
 
-AutoFileLock::AutoFileLock(const std::string &flock_path) :
+AutoFileLock::AutoFileLock(const std::string &flock_path, short l_type) :
     m_flock_path(flock_path)
 {
+    // Make sure the l_type is correct
+    assert(l_type == F_WRLCK || l_type == F_RDLCK);
+
     m_fd = open(STR(m_flock_path), O_RDWR|O_CREAT,
                 S_IRWXU|S_IRWXG|S_IRWXO);
     if (m_fd < 0) {
@@ -973,8 +975,13 @@ AutoFileLock::AutoFileLock(const std::string &flock_path) :
         return;
     }
 
-    if (flock(m_fd, LOCK_EX) < 0) {
-        LOGE("Lock file lock \"%s\" failed: %s",
+    struct flock lock;
+    lock.l_whence = SEEK_SET;
+    lock.l_start = 0;
+    lock.l_len = 0;
+    lock.l_type = l_type;
+    if (fcntl(m_fd, F_SETLK, &lock) < 0) {
+        LOGE("Lock file \"%s\" failed: %s",
              STR(m_flock_path), ERRNOMSG);
         SAFE_CLOSE(m_fd);
         return;
@@ -984,8 +991,13 @@ AutoFileLock::AutoFileLock(const std::string &flock_path) :
 AutoFileLock::~AutoFileLock()
 {
     if (m_fd >= 0) {
-        if (flock(m_fd, LOCK_UN) < 0) {
-            LOGE("Unlock lock file \"%s\" failed: %s",
+        struct flock lock;
+        lock.l_whence = SEEK_SET;
+        lock.l_start = 0;
+        lock.l_len = 0;
+        lock.l_type = F_UNLCK;
+        if (fcntl(m_fd, F_SETLK, &lock) < 0) {
+            LOGE("Unlock file \"%s\" failed: %s",
                  STR(m_flock_path), ERRNOMSG);
         }
         SAFE_CLOSE(m_fd);

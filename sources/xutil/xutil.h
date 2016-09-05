@@ -24,6 +24,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "xutil_macros.h"
 
@@ -348,7 +349,7 @@ private:
 
 class AutoFileLock {
 public:
-    AutoFileLock(const std::string &flock_path);
+    AutoFileLock(const std::string &flock_path, short l_type = F_WRLCK);
     ~AutoFileLock();
 
 private:
