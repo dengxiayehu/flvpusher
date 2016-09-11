@@ -4,7 +4,7 @@ SET(PROG_NAME flvpusher)
 
 PROJECT(${PROG_NAME})
 
-ADD_DEFINITIONS(-ggdb3 -O0 -Wall -Wno-unused-but-set-variable)
+ADD_DEFINITIONS(-g -O0 -Wall -Wno-unused-but-set-variable)
 
 SET(MODULE_LIST app common flv hls mp4 ts rtmp rtsp server xutil .)
 

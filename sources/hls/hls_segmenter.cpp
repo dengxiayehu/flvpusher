@@ -174,7 +174,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                            (pkt->data[4]&0x1f) == 7);
             if (is_video)
                 info->duration = (double) (pkt->pts-info->end_pts)*tb.num/tb.den;
-            int64_t end_pts = m_hls_time * AV_TIME_BASE * info->number;
+            int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * info->number;
             if (is_video &&
                 is_key &&
                 av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
@@ -280,7 +280,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
                            (pkt_data[4]&0x1f) == 7);
             if (is_video)
                 info->duration = (double) (pkt_pts-info->end_pts)*tb.num/tb.den;
-            int64_t end_pts = m_hls_time * AV_TIME_BASE * info->number;
+            int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * info->number;
             if (is_video &&
                 is_key &&
                 av_compare_ts(pkt_pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
@@ -379,7 +379,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
                            (pkt->data[4]&0x1f) == 7);
             if (is_video)
                 info->duration = (double) (pkt->pts-info->end_pts)*tb.num/tb.den;
-            int64_t end_pts = m_hls_time * AV_TIME_BASE * (idx + 1);
+            int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * (idx + 1);
             if (is_video &&
                 is_key &&
                 av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0 &&
@@ -465,7 +465,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
                            (pkt_data[4]&0x1f) == 7);
             if (is_video)
                 info->duration = (double) (pkt_pts-info->end_pts)*tb.num/tb.den;
-            int64_t end_pts = m_hls_time * AV_TIME_BASE * (idx + 1);
+            int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * (idx + 1);
             if (is_video &&
                 is_key &&
                 av_compare_ts(pkt_pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0 &&
