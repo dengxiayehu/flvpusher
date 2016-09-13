@@ -40,7 +40,21 @@ int MP4Parser::init()
 {
     bzero(&m_track, sizeof(m_track));
     Track *trak = &m_track[VIDEO];
-    init_tracks_from_box(m_box, trak);
+    if (init_tracks_from_box(m_box, trak) < 0) {
+        LOGE("Init mp4's tracks failed");
+        return -1;
+    }
+
+    // Make sure the video and audio tracks are valid
+    if (m_parsed_track < NB_TRACK || // Only one track in file, not support
+        !m_track[AUDIO].track_ID || !m_track[VIDEO].track_ID || // Missing audio or video track
+        !m_track[AUDIO].mp4a || !m_track[VIDEO].avc1) { // Either video track's codec isn't h264 or
+                                                        // audio track's codec isn't mp4a
+        LOGE("Invalid audio(%u:%p) track or video(%u:%p) track",
+             m_track[AUDIO].track_ID, m_track[AUDIO].mp4a,
+             m_track[VIDEO].track_ID, m_track[VIDEO].avc1);
+        return -1;
+    }
 
     bzero(&m_status, sizeof(m_status));
     ReadStatus *rstatus;
