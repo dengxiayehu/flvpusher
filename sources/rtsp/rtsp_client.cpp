@@ -148,7 +148,7 @@ int RtspClient::request_options(TaskFunc *proc)
     }
 
     ResponseInfo ri;
-    if (recv_response(&ri) < 0)
+    if (recv_response(&ri) < 0 || ri.response_code != 200)
         return -1;
 
     m_server_supports_get_parameter = rtsp_option_is_supported(
@@ -168,7 +168,7 @@ int RtspClient::request_describe(std::string &sdp, TaskFunc *proc)
         return -1;
 
     ResponseInfo ri;
-    if (recv_response(&ri) < 0)
+    if (recv_response(&ri) < 0 || ri.response_code != 200)
         return -1;
 
     if (strncasecmp(ri.content_type_parm_str, "application/sdp", 15)) {
@@ -521,7 +521,7 @@ int RtspClient::request_teardown()
     }
 
     ResponseInfo ri;
-    if (!recv_response(&ri)) {
+    if (!recv_response(&ri) && ri.response_code == 200) {
         m_stat = StateInit;
     }
     return 0;
@@ -551,7 +551,7 @@ int RtspClient::request_get_parameter(TaskFunc *proc)
     }
 
     ResponseInfo ri;
-    if (!recv_response(&ri)) {
+    if (!recv_response(&ri) && ri.response_code == 200) {
         m_stat = StateInit;
         return -1;
     }
@@ -571,7 +571,7 @@ int RtspClient::request_announce(const std::string &sdp)
 
     if (send_request(STR(cmd_url), "ANNOUNCE", sdp) > 0) {
         ResponseInfo ri;
-        if (!recv_response(&ri)) {
+        if (!recv_response(&ri) && ri.response_code == 200) {
             m_stat = StateInit;
         }
     }
@@ -634,7 +634,7 @@ int RtspClient::request_setup(MediaSubsession *subsession,
 
     if (send_request(STR(cmd_url), "SETUP") > 0) {
         ResponseInfo ri;
-        if (!recv_response(&ri)) {
+        if (!recv_response(&ri) && ri.response_code == 200) {
             char *session_id = (char *) malloc(strlen(ri.session_parm_str) + 1);
             if (session_id) {
                 do {
@@ -797,7 +797,7 @@ int RtspClient::request_play(MediaSession *session,
 
     if (send_request(STR(cmd_url), "PLAY") > 0) {
         ResponseInfo ri;
-        if (!recv_response(&ri)) {
+        if (!recv_response(&ri) && ri.response_code == 200) {
             m_stat = StatePlaying;
         }
     }
