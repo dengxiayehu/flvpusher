@@ -450,7 +450,7 @@ char *strdup_(const char *s)
 
 void rm_(const std::string &path)
 {
-    system_(STR(sprintf_("rm -rf %s", STR(path))));
+    system_(STR(sprintf_("rm -rf \"%s\"", STR(path))));
 }
 
 int is_path_absolute(const char *path)

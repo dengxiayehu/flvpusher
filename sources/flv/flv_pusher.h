@@ -12,7 +12,7 @@ public:
     FLVPusher(const std::string &input, MediaSink *&sink);
     virtual ~FLVPusher();
 
-    int loop();
+    virtual int loop();
 
 private:
     TagStreamerBase *m_vstrmer;

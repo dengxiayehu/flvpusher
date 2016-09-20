@@ -27,6 +27,8 @@ public:
 
     void ask2quit();
 
+    int64_t get_start_time() const;
+
 private:
     struct TSFilter;
 

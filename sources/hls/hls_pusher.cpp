@@ -9,6 +9,7 @@
 #include "hls_common.h"
 #include "hls_pusher.h"
 #include "ts/ts_pusher.h"
+#include "ts/ts_parser.h"
 
 using namespace xconfig;
 using namespace xcurl;
@@ -27,6 +28,8 @@ HLSPusher::segment::segment(const int duration, const char *uri)
     key_loaded = false;
     key_path = NULL;
     iobuf = NULL;
+    ts_pusher = NULL;
+    memset(tempts, 0, sizeof(tempts));
 }
 
 HLSPusher::segment::segment(const segment &obj)
@@ -48,6 +51,8 @@ HLSPusher::segment::~segment()
     SAFE_FREE(url);
     SAFE_FREE(key_path);
     SAFE_DELETE(iobuf);
+    SAFE_DELETE(ts_pusher);
+    rm_(tempts);
 }
 
 bool HLSPusher::segment::is_downloaded()
@@ -283,6 +288,29 @@ int HLSPusher::hls_stream::download(stream_sys *sys, segment *seg)
         return -1;
     }
 
+    // When segment downloaded, we parse it immediately
+    snprintf(seg->tempts, sizeof(seg->tempts),
+             "flvpusher-%s-XXXXXX", STR(basename_(seg->url)));
+    if (mkstemp(seg->tempts) < 0) {
+        LOGE("mkstemp failed: %s", ERRNOMSG);
+        return -1;
+    }
+
+    // Write segment data into ts file for TSPusher
+    File::flush_content(seg->tempts,
+            GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "wb");
+
+    // Try to parse the segment
+    seg->ts_pusher = new TSPusher(seg->tempts, sys->pusher->m_sink, true);
+    seg->ts_pusher->dump_video(sys->pusher->m_dvf.get_path(), true);
+    seg->ts_pusher->dump_audio(sys->pusher->m_daf.get_path(), true);
+    if (seg->ts_pusher->init_parser() < 0) {
+        LOGE("Init parser for segment(seq=%d) failed",
+             seg->sequence);
+        SAFE_DELETE(seg->ts_pusher);
+        return -1;
+    }
+
     seg->size = GETAVAILABLEBYTESCOUNT(*seg->iobuf);
     return 0;
 }
@@ -507,7 +535,8 @@ HLSPusher::hls_stream *HLSPusher::stream_sys::find_hls(hls_stream *hls_new)
 
 HLSPusher::HLSPusher(const string &input, MediaSink *&sink, Config *conf) :
     MediaPusher(input, sink),
-    m_conf(conf), m_sys(NULL), m_ts_pusher(NULL)
+    m_conf(conf), m_sys(NULL), m_ts_pusher(NULL),
+    m_tm_offset(-1)
 {
 }
 
@@ -643,25 +672,24 @@ void HLSPusher::ask2quit()
     if (m_ts_pusher) {
         m_ts_pusher->ask2quit();
     }
+    m_sys->download.wait.signal();
 }
 
 int HLSPusher::live_segment(segment *seg)
 {
-    char tempts[1024];
-    snprintf(tempts, sizeof(tempts),
-             "flvpusher-%s-XXXXXX", STR(basename_(seg->url)));
-    if (mkstemp(tempts) < 0) {
-        LOGE("mkstemp failed: %s", ERRNOMSG);
-        return -1;
+    // In case user wants to stop pushing this segment,
+    // we will response this in ask2quit()
+    m_ts_pusher = seg->ts_pusher;
+
+    // Normally we need to adjust the segment's timestamp
+    // to start with 0
+    if (m_tm_offset == -1) {
+        m_tm_offset =
+            -seg->ts_pusher->get_parser()->get_start_time() / 1000; // In milliseconds
     }
 
-    File::flush_content(tempts,
-                        GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "wb");
-
     int ret = 0;
-    m_ts_pusher = new TSPusher(tempts, m_sink, true);
-    m_ts_pusher->dump_video(m_dvf.get_path(), true);
-    m_ts_pusher->dump_audio(m_daf.get_path(), true);
+    m_ts_pusher->set_timestamp_offset(m_tm_offset);
     if (m_ts_pusher->loop() < 0) {
         ret = -1;
     }
@@ -669,9 +697,11 @@ int HLSPusher::live_segment(segment *seg)
         File::flush_content(m_tspath,
                             GETIBPOINTER(*seg->iobuf), GETAVAILABLEBYTESCOUNT(*seg->iobuf), "a");
     }
-    rm_(tempts);
+    rm_(seg->tempts);
     SAFE_DELETE(seg->iobuf);
-    SAFE_DELETE(m_ts_pusher);
+    SAFE_DELETE(seg->ts_pusher);
+
+    m_ts_pusher = NULL;
     return ret;
 }
 
@@ -1306,7 +1336,7 @@ int HLSPusher::choose_segment(stream_sys *sys, const int current)
         assert(seg);
 
         if (seg->duration > hls->duration) {
-            LOGE("EXTINF:%d duration is larger than EXT-X-TARGETDURATION:%d",
+            LOGW("EXTINF:%d duration is larger than EXT-X-TARGETDURATION:%d",
                  seg->duration, hls->duration);
         }
 

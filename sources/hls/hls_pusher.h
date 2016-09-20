@@ -32,6 +32,9 @@ private:
         xutil::RecursiveMutex mutex;
         xutil::IOBuffer *iobuf;
 
+        TSPusher *ts_pusher;
+        char tempts[1024];
+
         segment(const int duration, const char *uri);
         segment(const segment &obj);
         ~segment();
@@ -165,6 +168,7 @@ private:
     stream_sys *m_sys;
     xutil::RecursiveMutex m_mutex;
     TSPusher *m_ts_pusher;
+    int m_tm_offset;
 };
 
 }

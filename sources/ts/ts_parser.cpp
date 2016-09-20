@@ -1357,6 +1357,14 @@ void TSParser::ask2quit()
         m_ts->stream->quit = 1;
 }
 
+int64_t TSParser::get_start_time() const
+{
+    if (m_ts) {
+        return m_ts->stream->start_time;
+    }
+    return -1;
+}
+
 int TSParser::ts_read_packet(FormatContext *s, Packet *pkt)
 {
     TSContext *ts = (TSContext *) s->priv_data;
