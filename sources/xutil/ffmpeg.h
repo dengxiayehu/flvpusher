@@ -28,220 +28,220 @@ using namespace xmedia;
 namespace ffmpeg {
 
 struct Packet {
-    uint8_t *data;
-    int size;
-    int64_t pts, dts;
-    int64_t pos;
-    int stream_index;
-    int duration;
+  uint8_t *data;
+  int size;
+  int64_t pts, dts;
+  int64_t pos;
+  int stream_index;
+  int duration;
 };
 
 struct PacketList {
-    Packet pkt;
-    PacketList *next;
+  Packet pkt;
+  PacketList *next;
 };
 
 enum MediaType {
-    MEDIA_TYPE_UNKNOWN,
-    MEDIA_TYPE_VIDEO,
-    MEDIA_TYPE_AUDIO,
+  MEDIA_TYPE_UNKNOWN,
+  MEDIA_TYPE_VIDEO,
+  MEDIA_TYPE_AUDIO,
 };
 
 enum CodecID {
-    CODEC_ID_NONE,
-    CODEC_ID_H264,
-    CODEC_ID_AAC
+  CODEC_ID_NONE,
+  CODEC_ID_H264,
+  CODEC_ID_AAC
 };
 
 struct AVRational {
-    int num;
-    int den;
+  int num;
+  int den;
 };
 
 struct Codec {
-    const char *name;
-    MediaType type;
-    CodecID id;
+  const char *name;
+  MediaType type;
+  CodecID id;
 };
 
 struct CodecContext {
-    enum MediaType codec_type;
-    enum CodecID codec_id;
-    Codec *codec;
+  enum MediaType codec_type;
+  enum CodecID codec_id;
+  Codec *codec;
 
-    // Video only
-    int width, height;
+  // Video only
+  int width, height;
 
-    int frame_size;
+  int frame_size;
 
-    // Audio only
-    int sample_rate;
-    int channels;
+  // Audio only
+  int sample_rate;
+  int channels;
 
-    AVRational time_base;
-    int bit_rate;
+  AVRational time_base;
+  int bit_rate;
 };
 
 struct CodecParser;
 struct CodecParserContext {
-    void *priv_data;
-    CodecParser *parser;
-    int64_t pts, dts;
-    int64_t pos;
-    int key_frame;
+  void *priv_data;
+  CodecParser *parser;
+  int64_t pts, dts;
+  int64_t pos;
+  int key_frame;
 
-    int flags;
+  int flags;
 
-    int64_t last_pts;               
-    int64_t last_dts;
-    int fetch_timestamp;
+  int64_t last_pts;               
+  int64_t last_dts;
+  int fetch_timestamp;
 
-    int cur_frame_start_index;
-    int64_t cur_frame_offset[PARSER_PTS_NB];
-    int64_t cur_frame_pts[PARSER_PTS_NB];
-    int64_t cur_frame_dts[PARSER_PTS_NB];
+  int cur_frame_start_index;
+  int64_t cur_frame_offset[PARSER_PTS_NB];
+  int64_t cur_frame_pts[PARSER_PTS_NB];
+  int64_t cur_frame_dts[PARSER_PTS_NB];
 
-    int64_t offset;      ///< byte offset from starting packet start
-    int64_t cur_frame_end[PARSER_PTS_NB];
+  int64_t offset;      ///< byte offset from starting packet start
+  int64_t cur_frame_end[PARSER_PTS_NB];
 
-    int64_t cur_offset; /* current offset
-                           (incremented by each av_parser_parse()) */
-    int64_t next_frame_offset; /* offset of the next frame */
+  int64_t cur_offset; /* current offset
+                         (incremented by each av_parser_parse()) */
+  int64_t next_frame_offset; /* offset of the next frame */
 
-    int64_t cur_frame_pos[PARSER_PTS_NB];
+  int64_t cur_frame_pos[PARSER_PTS_NB];
 
-    int64_t last_pos;
+  int64_t last_pos;
 
-    int64_t frame_offset;
+  int64_t frame_offset;
 };
 
 struct CodecParser {
-    CodecID codec_id;
-    int priv_data_size;
-    int (*parser_init)(CodecParserContext *s);
-    int (*parser_parse)(CodecParserContext *s,
-                        CodecContext *avctx,
-                        const uint8_t **poutbuf, int *poutbuf_size,
-                        const uint8_t *buf, int buf_size);
-    void (*parser_close)(CodecParserContext *s);
-    int (*split)(CodecContext *avctx, const uint8_t *buf, int buf_size);
+  CodecID codec_id;
+  int priv_data_size;
+  int (*parser_init)(CodecParserContext *s);
+  int (*parser_parse)(CodecParserContext *s,
+                      CodecContext *avctx,
+                      const uint8_t **poutbuf, int *poutbuf_size,
+                      const uint8_t *buf, int buf_size);
+  void (*parser_close)(CodecParserContext *s);
+  int (*split)(CodecContext *avctx, const uint8_t *buf, int buf_size);
 };
 
 struct ParseContext {
-    uint8_t *buffer;
-    int index;
-    int last_index;
-    unsigned int buffer_size;
-    uint32_t state;             ///< contains the last few bytes in MSB order
-    //int frame_start_found;
-    int overread;               ///< the number of bytes which where irreversibly read from the next frame
-    int overread_index;         ///< the index into ParseContext.buffer of the overread bytes
-    uint64_t state64;
+  uint8_t *buffer;
+  int index;
+  int last_index;
+  unsigned int buffer_size;
+  uint32_t state;             ///< contains the last few bytes in MSB order
+  //int frame_start_found;
+  int overread;               ///< the number of bytes which where irreversibly read from the next frame
+  int overread_index;         ///< the index into ParseContext.buffer of the overread bytes
+  uint64_t state64;
 };
 
 struct Stream {
-    int index;
-    int id;
-    CodecContext *codec;
-    int64_t start_time;
-    int pts_wrap_bits;
-    AVRational time_base;
-    int need_parsing;
-    CodecParserContext *parser;
-    int64_t cur_dts;
-    PacketList *last_in_packet_buffer;
-    int nb_index_entries;
-    void *priv_data;
-    int64_t nb_frames;
+  int index;
+  int id;
+  CodecContext *codec;
+  int64_t start_time;
+  int pts_wrap_bits;
+  AVRational time_base;
+  int need_parsing;
+  CodecParserContext *parser;
+  int64_t cur_dts;
+  PacketList *last_in_packet_buffer;
+  int nb_index_entries;
+  void *priv_data;
+  int64_t nb_frames;
 };
 
 struct FormatContext;
 struct InputFormat {
-    const char *name;
-    int priv_data_size;
-    int (*read_packet)(FormatContext *, Packet *pkt);
+  const char *name;
+  int priv_data_size;
+  int (*read_packet)(FormatContext *, Packet *pkt);
 };
 struct OutputFormat {
-    const char *name;
-    int priv_data_size;
-    int (*write_packet)(FormatContext *, Packet *pkt);
+  const char *name;
+  int priv_data_size;
+  int (*write_packet)(FormatContext *, Packet *pkt);
 };
 
 struct FormatContext {
-    InputFormat *iformat;
-    OutputFormat *oformat;
-    xfile::File *file;
-    unsigned int nb_streams;
-    Stream **streams;
-    int64_t start_time;
-    PacketList *packet_buffer;
-    PacketList *packet_buffer_end;
-    PacketList *parse_queue;
-    PacketList *parse_queue_end;
-    int max_interleave_delta;
-    void *priv_data;
-    volatile int quit;
-    int64_t ts_offset;
-    AVRational otime_base;
-    int max_delay;
-    FrameCb cb;
-    void *opaque;
+  InputFormat *iformat;
+  OutputFormat *oformat;
+  xfile::File *file;
+  unsigned int nb_streams;
+  Stream **streams;
+  int64_t start_time;
+  PacketList *packet_buffer;
+  PacketList *packet_buffer_end;
+  PacketList *parse_queue;
+  PacketList *parse_queue_end;
+  int max_interleave_delta;
+  void *priv_data;
+  volatile int quit;
+  int64_t ts_offset;
+  AVRational otime_base;
+  int max_delay;
+  FrameCb cb;
+  void *opaque;
 };
 
 enum AVRounding {
-    AV_ROUND_ZERO     = 0, ///< Round toward zero.
-    AV_ROUND_INF      = 1, ///< Round away from zero.
-    AV_ROUND_DOWN     = 2, ///< Round toward -infinity.
-    AV_ROUND_UP       = 3, ///< Round toward +infinity.
-    AV_ROUND_NEAR_INF = 5, ///< Round to nearest and halfway cases away from zero.
-    AV_ROUND_PASS_MINMAX = 8192, ///< Flag to pass INT64_MIN/MAX through instead of rescaling, this avoids special cases for AV_NOPTS_VALUE
+  AV_ROUND_ZERO     = 0, ///< Round toward zero.
+  AV_ROUND_INF      = 1, ///< Round away from zero.
+  AV_ROUND_DOWN     = 2, ///< Round toward -infinity.
+  AV_ROUND_UP       = 3, ///< Round toward +infinity.
+  AV_ROUND_NEAR_INF = 5, ///< Round to nearest and halfway cases away from zero.
+  AV_ROUND_PASS_MINMAX = 8192, ///< Flag to pass INT64_MIN/MAX through instead of rescaling, this avoids special cases for AV_NOPTS_VALUE
 };
 
 struct AACParseContext {
-    ParseContext pc;
-    int frame_size;
-    int header_size;
-    int (*sync) (uint64_t state, struct AACParseContext *hdr_info,
-                 int *need_next_header, int *new_frame_start);
-    int channels;
-    int sample_rate;
-    int bit_rate;
-    int samples;
-    uint64_t channel_layout;
+  ParseContext pc;
+  int frame_size;
+  int header_size;
+  int (*sync) (uint64_t state, struct AACParseContext *hdr_info,
+               int *need_next_header, int *new_frame_start);
+  int channels;
+  int sample_rate;
+  int bit_rate;
+  int samples;
+  uint64_t channel_layout;
 
-    int remaining_size;
-    uint64_t state;
+  int remaining_size;
+  uint64_t state;
 
-    int need_next_header;
-    CodecID codec_id;
+  int need_next_header;
+  CodecID codec_id;
 };
 
 struct AACADTSHeaderInfo {
-    uint32_t sample_rate;
-    uint32_t samples;
-    uint32_t bit_rate;    
-    uint8_t  crc_absent;  
-    uint8_t  object_type; 
-    uint8_t  sampling_index;
-    uint8_t  chan_config;
-    uint8_t  num_aac_frames;
+  uint32_t sample_rate;
+  uint32_t samples;
+  uint32_t bit_rate;    
+  uint8_t  crc_absent;  
+  uint8_t  object_type; 
+  uint8_t  sampling_index;
+  uint8_t  chan_config;
+  uint8_t  num_aac_frames;
 };
 
 struct H264Context {
-    CodecContext *avctx;
-    int width, height;
-    int got_first;
-    int is_avc;
-    int nal_unit_type;
-    uint8_t *rbsp_buffer[2];
-    unsigned int rbsp_buffer_size[2];
-    int nal_length_size;
-    GetBitContext gb;
-    SPS sps;
+  CodecContext *avctx;
+  int width, height;
+  int got_first;
+  int is_avc;
+  int nal_unit_type;
+  uint8_t *rbsp_buffer[2];
+  unsigned int rbsp_buffer_size[2];
+  int nal_length_size;
+  GetBitContext gb;
+  SPS sps;
 };
 
 struct AVFrac {
-    int64_t val, num, den;
+  int64_t val, num, den;
 };
 
 AVRational av_mul_q(AVRational b, AVRational c);

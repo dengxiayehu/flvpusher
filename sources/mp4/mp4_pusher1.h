@@ -11,28 +11,28 @@ class MP4Parser;
 
 class MP4Pusher1 : public MediaPusher {
 public:
-    MP4Pusher1(const std::string &input, MediaSink *&sink);
-    virtual ~MP4Pusher1();
+  MP4Pusher1(const std::string &input, MediaSink *&sink);
+  virtual ~MP4Pusher1();
 
-    virtual int loop();
+  virtual int loop();
 
-    virtual void ask2quit();
-
-private:
-    static int parsed_frame_cb(void *, xmedia::Frame *, int);
-
-    int prepare();
-
-    int send_metadata();
+  virtual void ask2quit();
 
 private:
-    MP4Parser *m_parser;
+  static int parsed_frame_cb(void *, xmedia::Frame *, int);
 
-    int32_t m_prev_ts;
-    uint64_t m_tm_start;
+  int prepare();
 
-    uint32_t m_width;
-    uint32_t m_height;
+  int send_metadata();
+
+private:
+  MP4Parser *m_parser;
+
+  int32_t m_prev_ts;
+  uint64_t m_tm_start;
+
+  uint32_t m_width;
+  uint32_t m_height;
 };
 
 }

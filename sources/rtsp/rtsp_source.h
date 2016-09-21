@@ -13,19 +13,19 @@ class RtspClient;
 
 class RtspSource : public MediaPusher {
 public:
-    RtspSource(const std::string &input, MediaSink *&sink);
-    virtual ~RtspSource();
+  RtspSource(const std::string &input, MediaSink *&sink);
+  virtual ~RtspSource();
 
-    virtual int loop();
+  virtual int loop();
 
-    virtual int on_frame(const int32_t ts,
-                         const byte *dat, const uint32_t dat_len, int is_video);
-
-private:
-    int prepare();
+  virtual int on_frame(const int32_t ts,
+      const byte *dat, const uint32_t dat_len, int is_video);
 
 private:
-    RtspClient *m_client;
+  int prepare();
+
+private:
+  RtspClient *m_client;
 };
 
 };

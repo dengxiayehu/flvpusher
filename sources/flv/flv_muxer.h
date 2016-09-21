@@ -8,20 +8,20 @@ namespace flvpusher {
 
 class FLVMuxer {
 public:
-    FLVMuxer();
-    ~FLVMuxer();
+  FLVMuxer();
+  ~FLVMuxer();
 
-    int set_file(const std::string &flvpath);
+  int set_file(const std::string &flvpath);
 
-    bool is_opened() const;
+  bool is_opened() const;
 
-    int write_tag(int typ, int ts, const uint8_t *buf, int buf_size);
+  int write_tag(int typ, int ts, const uint8_t *buf, int buf_size);
 
-    const char *get_path() const;
+  const char *get_path() const;
 
 private:
-    xfile::File *m_file;
-    int m_tm_offset;
+  xfile::File *m_file;
+  int m_tm_offset;
 };
 
 }

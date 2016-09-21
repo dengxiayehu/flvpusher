@@ -11,28 +11,28 @@ class MP4Parser;
 
 class MP4Pusher : public MediaPusher {
 public:
-    MP4Pusher(const std::string &input, MediaSink *&sink);
-    virtual ~MP4Pusher();
+  MP4Pusher(const std::string &input, MediaSink *&sink);
+  virtual ~MP4Pusher();
 
-    int loop();
-
-private:
-    DECL_THREAD_ROUTINE(MP4Pusher, vsnd_func);
-    DECL_THREAD_ROUTINE(MP4Pusher, asnd_func);
+  int loop();
 
 private:
-    int prepare();
-    int send_metadata();
+  DECL_THREAD_ROUTINE(MP4Pusher, vsnd_func);
+  DECL_THREAD_ROUTINE(MP4Pusher, asnd_func);
 
 private:
-    xutil::Thread *m_vthrd;
-    xutil::Thread *m_athrd;
+  int prepare();
+  int send_metadata();
 
-    MP4Parser *m_parser;
-    xutil::RecursiveMutex m_mutex;
+private:
+  xutil::Thread *m_vthrd;
+  xutil::Thread *m_athrd;
 
-    uint64_t m_tm_start;
-    int m_retval;
+  MP4Parser *m_parser;
+  xutil::RecursiveMutex m_mutex;
+
+  uint64_t m_tm_start;
+  int m_retval;
 };
 
 }

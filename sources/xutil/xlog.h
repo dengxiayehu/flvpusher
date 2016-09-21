@@ -4,19 +4,19 @@
 #include <cstdarg>
 
 #define LOGD(fmt, ...) do { \
-    xlog::log_print(__FILE__, __LINE__, xlog::DEBUG, fmt, ##__VA_ARGS__); \
+  xlog::log_print(__FILE__, __LINE__, xlog::DEBUG, fmt, ##__VA_ARGS__); \
 } while (0)
 
 #define LOGI(fmt, ...) do { \
-    xlog::log_print(__FILE__, __LINE__, xlog::INFO, fmt, ##__VA_ARGS__); \
+  xlog::log_print(__FILE__, __LINE__, xlog::INFO, fmt, ##__VA_ARGS__); \
 } while (0)
 
 #define LOGW(fmt, ...) do { \
-    xlog::log_print(__FILE__, __LINE__, xlog::WARN, fmt, ##__VA_ARGS__); \
+  xlog::log_print(__FILE__, __LINE__, xlog::WARN, fmt, ##__VA_ARGS__); \
 } while (0)
 
 #define LOGE(fmt, ...) do { \
-    xlog::log_print(__FILE__, __LINE__, xlog::ERR, fmt, ##__VA_ARGS__); \
+  xlog::log_print(__FILE__, __LINE__, xlog::ERR, fmt, ##__VA_ARGS__); \
 } while (0)
 
 #include "xutil.h"
@@ -26,10 +26,10 @@ using xutil::status_t;
 namespace xlog {
 
 enum log_level {
-    DEBUG,
-    INFO,
-    WARN,
-    ERR
+  DEBUG,
+  INFO,
+  WARN,
+  ERR
 };
 
 #define LOG_TRUNC       1

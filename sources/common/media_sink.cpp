@@ -6,22 +6,22 @@
 namespace flvpusher {
 
 MediaSink::MediaSink(const std::string &flvpath) :
-    m_vparser(new VideoRawParser),
-    m_aparser(new AudioRawParser),
-    m_quit(false)
+  m_vparser(new VideoRawParser),
+  m_aparser(new AudioRawParser),
+  m_quit(false)
 {
-    if (!flvpath.empty()) {
-        if (m_flvmuxer.set_file(flvpath) < 0) {
-            LOGE("flvmuxer's set_file() failed");
-            // Fall through
-        }
+  if (!flvpath.empty()) {
+    if (m_flvmuxer.set_file(flvpath) < 0) {
+      LOGE("flvmuxer's set_file() failed");
+      // Fall through
     }
+  }
 }
 
 MediaSink::~MediaSink()
 {
-    SAFE_DELETE(m_vparser);
-    SAFE_DELETE(m_aparser);
+  SAFE_DELETE(m_vparser);
+  SAFE_DELETE(m_aparser);
 }
 
 }

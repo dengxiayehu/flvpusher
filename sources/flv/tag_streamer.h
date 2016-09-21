@@ -10,58 +10,58 @@ namespace flvpusher {
 
 class TagStreamerBase {
 public:
-    TagStreamerBase(const std::string &dump_path = "");
-    virtual ~TagStreamerBase();
+  TagStreamerBase(const std::string &dump_path = "");
+  virtual ~TagStreamerBase();
 
-    virtual int process(FLVParser::FLVTag &tag)  = 0;
+  virtual int process(FLVParser::FLVTag &tag)  = 0;
 
-    int set_dump_path(const std::string &path);
+  int set_dump_path(const std::string &path);
 
-    byte *get_strm() const;
-    uint32_t get_strm_length () const;
+  byte *get_strm() const;
+  uint32_t get_strm_length () const;
 
 protected:
-    xfile::File m_file;
-    xutil::MemHolder m_mem_holder;
-    uint32_t m_strm_len;
+  xfile::File m_file;
+  xutil::MemHolder m_mem_holder;
+  uint32_t m_strm_len;
 };
 
 /////////////////////////////////////////////////////////////
 
 class VideoTagStreamer : public TagStreamerBase {
-    friend class HLSSegmenter;
+  friend class HLSSegmenter;
 public:
-    VideoTagStreamer(const std::string &dump_path = "")
-        : TagStreamerBase(dump_path), m_sps_len(0), m_pps_len(0) { }
+  VideoTagStreamer(const std::string &dump_path = "")
+    : TagStreamerBase(dump_path), m_sps_len(0), m_pps_len(0) { }
 
-    virtual int process(FLVParser::FLVTag &tag);
+  virtual int process(FLVParser::FLVTag &tag);
 
 private:
-    byte m_sps[128]; // hope enough
-    byte m_pps[128];
-    uint32_t m_sps_len;
-    uint32_t m_pps_len;
+  byte m_sps[128]; // hope enough
+  byte m_pps[128];
+  uint32_t m_sps_len;
+  uint32_t m_pps_len;
 };
 
 /////////////////////////////////////////////////////////////
 
 class AudioTagStreamer : public TagStreamerBase {
-    friend class HLSSegmenter;
+  friend class HLSSegmenter;
 public:
-    AudioTagStreamer(const std::string &dump_path = "")
-        : TagStreamerBase(dump_path) { }
+  AudioTagStreamer(const std::string &dump_path = "")
+    : TagStreamerBase(dump_path) { }
 
-    virtual int process(FLVParser::FLVTag &tag);
+  virtual int process(FLVParser::FLVTag &tag);
 
 private:
-    AudioSpecificConfig m_asc;
+  AudioSpecificConfig m_asc;
 };
 
 /////////////////////////////////////////////////////////////
 
 class ScriptTagStreamer : public TagStreamerBase {
 public:
-    virtual int process(FLVParser::FLVTag &tag);
+  virtual int process(FLVParser::FLVTag &tag);
 };
 
 }

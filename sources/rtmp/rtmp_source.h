@@ -14,35 +14,35 @@ class TagStreamerBase;
 
 class RtmpSource : public MediaPusher {
 public:
-    RtmpSource(const std::string &input, MediaSink *&sink);
-    virtual ~RtmpSource();
+  RtmpSource(const std::string &input, MediaSink *&sink);
+  virtual ~RtmpSource();
 
-    virtual int loop();
-
-private:
-    struct MediaInfo {
-        uint32_t vcodec_id, acodec_id;
-        uint32_t w, h;
-        uint32_t vrx, arx;
-        uint32_t samplerate;
-        uint32_t channel;
-        FPSCalc fps;
-        BitrateCalc vBC, aBC;
-    };
+  virtual int loop();
 
 private:
-    int prepare();
-    int disconnect();
+  struct MediaInfo {
+    uint32_t vcodec_id, acodec_id;
+    uint32_t w, h;
+    uint32_t vrx, arx;
+    uint32_t samplerate;
+    uint32_t channel;
+    FPSCalc fps;
+    BitrateCalc vBC, aBC;
+  };
 
 private:
-    RTMP *m_rtmp;
-    uint32_t m_buffer_time;
+  int prepare();
+  int disconnect();
 
-    TagStreamerBase *m_vstrmer;
-    TagStreamerBase *m_astrmer;
-    TagStreamerBase *m_sstrmer;
+private:
+  RTMP *m_rtmp;
+  uint32_t m_buffer_time;
 
-    MediaInfo m_info;
+  TagStreamerBase *m_vstrmer;
+  TagStreamerBase *m_astrmer;
+  TagStreamerBase *m_sstrmer;
+
+  MediaInfo m_info;
 };
 
 }
