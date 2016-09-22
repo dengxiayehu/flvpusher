@@ -134,12 +134,17 @@ int RtmpSource::loop()
 
   FLVParser parser;
   bool read_header = true;
-  char buf[RTMP_MAX_PLAY_BUFSIZE];
+  // Malloc play buffer on heap instead of stack
+  char *buf = (char *) malloc(RTMP_MAX_PLAY_BUFSIZE);
+  if (!buf) {
+    LOGE("malloc for RTMP_MAX_PLAY_BUFSIZE failed: %s", ERRNOMSG);
+    return -1;
+  }
   double duration = 0;
   int nread = 0;
   do {
     int nprocessed = 0;
-    nread = RTMP_Read(m_rtmp, buf, sizeof(buf));
+    nread = RTMP_Read(m_rtmp, buf, RTMP_MAX_PLAY_BUFSIZE);
     if (nread > 0) {
       if (duration <= 0)
         duration = RTMP_GetDuration(m_rtmp);
@@ -158,8 +163,9 @@ int RtmpSource::loop()
       if (read_header) { // Read flv file header first
         FLVParser::FLVHeader hdr;
         if ((nprocessed = parser.read_header(hdr,
-                (uint8_t *) buf, nread)) < 0) {
+                                             (uint8_t *) buf, nread)) < 0) {
           LOGE("Read FLV header failed");
+          SAFE_FREE(buf);
           return -1;
         }
         nread -= nprocessed;
@@ -170,8 +176,9 @@ int RtmpSource::loop()
       while (nread > 0) { // Cover multi-tag in one RTMP_Read()
         FLVParser::FLVTag *tag = parser.alloc_tag();
         if ((nprocessed = parser.read_tag(tag,
-                (uint8_t *) (buf + offset), nread)) < 0) {
+                                          (uint8_t *) (buf + offset), nread)) < 0) {
           LOGE("Read FLV tag failed");
+          SAFE_FREE(buf);
           return -1;
         }
         nread -= nprocessed;
@@ -205,10 +212,10 @@ int RtmpSource::loop()
             LOGD("VIDEO timestamp is: %d", timestamp);
 #endif
             on_frame(timestamp,
-                m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1);
+                     m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1);
             if (m_sink->send_video(timestamp,
-                  m_vstrmer->get_strm(),
-                  m_vstrmer->get_strm_length()) < 0) {
+                                   m_vstrmer->get_strm(),
+                                   m_vstrmer->get_strm_length()) < 0) {
               LOGE("Send video data to rtmpserver failed");
               m_quit = true;
             }
@@ -221,7 +228,7 @@ int RtmpSource::loop()
               AudioSpecificConfig asc = tag->dat.audio.aac.asc;
               uint8_t profile, samplerate_idx, channel;
               if (parse_asc(asc,
-                    profile, samplerate_idx, channel) < 0) {
+                            profile, samplerate_idx, channel) < 0) {
                 LOGE("Parse asc(%02x %02x) failed",
                      asc.dat[0], asc.dat[1]);
                 break;
@@ -267,6 +274,8 @@ int RtmpSource::loop()
   } while (!m_quit &&
            nread > -1 &&
            RTMP_IsConnected(m_rtmp) && !RTMP_IsTimedout(m_rtmp));
+
+  SAFE_FREE(buf);
 
   if (nread < 0)
     nread = m_rtmp->m_read.status;
