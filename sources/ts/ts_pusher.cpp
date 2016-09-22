@@ -116,14 +116,14 @@ int TSPusher::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 
   if (is_video) {
     if (obj->m_sink->send_video(f->m_ts,
-          f->m_dat, f->m_dat_len) < 0) {
+                                f->m_dat, f->m_dat_len) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;
     }
   } else {
     if (obj->m_sink->send_audio(f->m_ts,
-          f->m_dat, f->m_dat_len) < 0) {
+                                f->m_dat, f->m_dat_len) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;

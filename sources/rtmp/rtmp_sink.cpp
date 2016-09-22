@@ -391,22 +391,7 @@ bool RtmpSink::send_rtmp_pkt(int pkttype, uint32_t ts,
   }
 
   RTMPContext *rt = &m_rt;
-#if defined (VERSION) && (VERSION == 1)
-  ::RTMPPacket rtmp_pkt;
-  RTMPPacket_Reset(&rtmp_pkt);
-  RTMPPacket_Alloc(&rtmp_pkt, pktsize);
-  memcpy(rtmp_pkt.m_body, buf, pktsize);
-  rtmp_pkt.m_packetType = pkttype;
-  rtmp_pkt.m_nChannel = pkttyp2channel(pkttype);
-  rtmp_pkt.m_headerType = RTMP_PACKET_SIZE_LARGE;
-  rtmp_pkt.m_nTimeStamp = ts;
-  rtmp_pkt.m_hasAbsTimestamp = 0;
-  rtmp_pkt.m_nInfoField2 = rt->rtmp->m_stream_id;
-  rtmp_pkt.m_nBodySize = pktsize;
-  bool retval = RTMP_SendPacket(rt->rtmp, &rtmp_pkt, FALSE);
-  RTMPPacket_Free(&rtmp_pkt);
-  return retval;
-#else
+#if defined (RTMP_SEND_FFMPEG) && (RTMP_SEND_FFMPEG != 0)
   int channel = RTMP_AUDIO_CHANNEL;
 
   if (pkttype == RTMP_PACKET_TYPE_VIDEO)
@@ -430,6 +415,21 @@ bool RtmpSink::send_rtmp_pkt(int pkttype, uint32_t ts,
     return false;
 
   return true;
+#else
+  ::RTMPPacket rtmp_pkt;
+  RTMPPacket_Reset(&rtmp_pkt);
+  RTMPPacket_Alloc(&rtmp_pkt, pktsize);
+  memcpy(rtmp_pkt.m_body, buf, pktsize);
+  rtmp_pkt.m_packetType = pkttype;
+  rtmp_pkt.m_nChannel = pkttyp2channel(pkttype);
+  rtmp_pkt.m_headerType = RTMP_PACKET_SIZE_LARGE;
+  rtmp_pkt.m_nTimeStamp = ts;
+  rtmp_pkt.m_hasAbsTimestamp = 0;
+  rtmp_pkt.m_nInfoField2 = rt->rtmp->m_stream_id;
+  rtmp_pkt.m_nBodySize = pktsize;
+  bool retval = RTMP_SendPacket(rt->rtmp, &rtmp_pkt, FALSE);
+  RTMPPacket_Free(&rtmp_pkt);
+  return retval;
 #endif
 }
 

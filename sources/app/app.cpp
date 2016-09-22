@@ -9,11 +9,7 @@
 #include "app.h"
 #include "common/config.h"
 #include "flv/flv_pusher.h"
-#if defined (VERSION) && (VERSION > 1)
-# include "mp4/mp4_pusher1.h"
-#else
-# include "mp4/mp4_pusher.h"
-#endif
+#include "mp4/mp4_pusher1.h"
 #include "ts/ts_pusher.h"
 #include "hls/hls_pusher.h"
 #include "rtmp/rtmp_source.h"
@@ -273,7 +269,7 @@ int App::check_arg() const
 
 void App::usage() const
 {
-  fprintf(stderr, "flvpusher (V: %d)\n\n"
+  fprintf(stderr, "flvpusher (V: %s)\n\n"
           "Usage: flvpusher <-i source|-w> <-L liveurl [--loop] [-a dump_audio] [-v dump_video] [-s tspath] [-f flvpath]|--hls_playlist filename [--hls_time time]> [-h] [--no_logfile]\n"
           "Description: \n"
           "-i, --input\n"
@@ -320,7 +316,7 @@ void App::usage() const
           "      c. use player(e.g. vlc) to play this hls vod: http://<this-server-ip:9877>/omn/omn.m3u8\n"
           "      d. you can modify root directory and listen port in flvpusher_cfg.txt, and put it in the same\n"
           "         directory with this tool\n"
-          , VERSION);
+          , VERSION_STR);
 }
 
 int App::prepare()
@@ -423,12 +419,8 @@ int App::main(int argc, char *argv[])
       } else if (end_with(*it, ".flv")) {
         m_pusher = new FLVPusher(*it, m_sink);
       } else if (end_with(*it, ".mp4") ||
-          end_with(*it, ".3gp") || end_with(*it, ".3gpp")) {
-#if defined (VERSION) && (VERSION > 1)
+                 end_with(*it, ".3gp") || end_with(*it, ".3gpp")) {
         m_pusher = new MP4Pusher1(*it, m_sink);
-#else
-        m_pusher = new MP4Pusher(*it, m_sink);
-#endif
       } else if (end_with(*it, ".ts")) {
         m_pusher = new TSPusher(*it, m_sink);
       } else if (start_with(*it, "http://")) {
