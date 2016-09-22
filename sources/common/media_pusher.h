@@ -25,10 +25,12 @@ public:
   int mux2ts(const std::string &tspath);
 
   virtual int on_frame(const int32_t ts,
-      const byte *dat, const uint32_t dat_len, int is_video);
+                       const byte *dat, const uint32_t dat_len, int is_video);
 
 protected:
   void set_itime_base(AVRational tb) { m_itime_base = tb; }
+
+  int frame_wait_done(int timestamp);
 
 protected:
   std::string m_input;
@@ -44,6 +46,9 @@ private:
   TSMuxer m_tsmuxer;
 
   xutil::RecursiveMutex m_mutex;
+
+  int m_start_timestamp;
+  uint64_t m_start_time;
 };
 
 }

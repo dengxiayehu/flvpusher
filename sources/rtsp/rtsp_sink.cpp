@@ -118,6 +118,8 @@ void *RtspSink::proc_routine(void *arg)
 
 int RtspSink::disconnect()
 {
+  m_quit = true;
+
   if (m_video->sink)
     m_video->sink->stop_playing();
   if (m_audio->sink)

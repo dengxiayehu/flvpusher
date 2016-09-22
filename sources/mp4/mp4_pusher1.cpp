@@ -14,7 +14,6 @@ namespace flvpusher {
 MP4Pusher1::MP4Pusher1(const std::string &input, MediaSink *&sink) :
   MediaPusher(input, sink),
   m_parser(NULL),
-  m_prev_ts(-1), m_tm_start(UINT64_MAX),
   m_width(0), m_height(0)
 {
 }
@@ -71,22 +70,10 @@ int MP4Pusher1::parsed_frame_cb(void *opaque, Frame *f, int is_video)
   MP4Pusher1 *obj = (MP4Pusher1 *) opaque;
   int ret = 0;
 
-  if (obj->m_prev_ts == -1)
-    obj->m_prev_ts = f->m_ts;
-  if (obj->m_tm_start == UINT64_MAX)
-    obj->m_tm_start = get_time_now();
+  if (obj->frame_wait_done(f->m_ts) < 0)
+    return -1;
 
   obj->on_frame(f->m_ts, f->m_dat, f->m_dat_len, is_video);
-
-  if (f->m_ts > obj->m_prev_ts) {
-    int32_t adjust_tm = get_time_now() - obj->m_tm_start - obj->m_prev_ts;
-
-    if (f->m_ts - obj->m_prev_ts > adjust_tm)
-      usleep((f->m_ts - obj->m_prev_ts - adjust_tm)*1000);
-
-
-    obj->m_prev_ts = f->m_ts;
-  }
 
   if (is_video) {
     if (obj->m_sink->send_video(f->m_ts,

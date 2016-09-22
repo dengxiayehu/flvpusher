@@ -35,8 +35,6 @@ private:
 private:
   TSParser *m_parser;
 
-  int32_t m_prev_ts;
-  uint64_t m_tm_start;
   int m_tm_offset;
 
   uint32_t m_width;

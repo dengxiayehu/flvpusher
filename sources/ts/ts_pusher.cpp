@@ -16,7 +16,7 @@ namespace flvpusher {
 TSPusher::TSPusher(const std::string &input, MediaSink *&sink, bool hls_segment) :
   MediaPusher(input, sink),
   m_parser(NULL),
-  m_prev_ts(-1), m_tm_start(UINT64_MAX), m_tm_offset(0),
+  m_tm_offset(0),
   m_width(0), m_height(0),
   m_hls_segment(hls_segment)
 {
@@ -94,25 +94,10 @@ int TSPusher::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 
   f->m_ts += obj->m_tm_offset;
 
-  if (obj->m_prev_ts == -1) {
-    obj->m_prev_ts = f->m_ts;
-  }
-
-  if (obj->m_tm_start == UINT64_MAX) {
-    obj->m_tm_start = get_time_now() - f->m_ts;
-  }
+  if (obj->frame_wait_done(f->m_ts) < 0)
+    return -1;
 
   obj->on_frame(f->m_ts, f->m_dat, f->m_dat_len, is_video);
-
-  if (f->m_ts > obj->m_prev_ts) {
-    int32_t adjust_tm = get_time_now() - obj->m_tm_start - obj->m_prev_ts;
-
-    if (f->m_ts - obj->m_prev_ts > adjust_tm) {
-      sleep_(f->m_ts - obj->m_prev_ts - adjust_tm);
-    }
-
-    obj->m_prev_ts = f->m_ts;
-  }
 
   if (is_video) {
     if (obj->m_sink->send_video(f->m_ts,

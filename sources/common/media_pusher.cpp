@@ -9,7 +9,8 @@ MediaPusher::MediaPusher(const std::string &input, MediaSink *&sink) :
   m_input(input),
   m_sink(sink),
   m_quit(false),
-  m_itime_base((AVRational) {1001, 24000})
+  m_itime_base((AVRational) {1001, 24000}),
+  m_start_time(0)
 {
 }
 
@@ -73,6 +74,26 @@ int MediaPusher::on_frame(const int32_t ts,
   }
 
   return 0;
+}
+
+int MediaPusher::frame_wait_done(int timestamp)
+{
+  if (m_start_time == 0) {
+    m_start_time = get_time_now();
+    m_start_timestamp = timestamp;
+  }
+
+  while (!m_quit) {
+    uint64_t now = get_time_now();
+    if ((int) (now - m_start_time) >= timestamp - m_start_timestamp) {
+      // frame wait done
+      break;
+    }
+    // a short sleep then check again
+    sleep_(5);
+  }
+
+  return m_quit ? -1 : 0;
 }
 
 }

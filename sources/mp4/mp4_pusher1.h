@@ -28,9 +28,6 @@ private:
 private:
   MP4Parser *m_parser;
 
-  int32_t m_prev_ts;
-  uint64_t m_tm_start;
-
   uint32_t m_width;
   uint32_t m_height;
 };
