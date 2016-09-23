@@ -58,7 +58,6 @@ private:
     int nb_prev_pkt[2];
     RTMP *rtmp;
     RTMPPacket out_pkt;
-    volatile int quit;
   };
 
 private:

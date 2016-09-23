@@ -109,9 +109,6 @@ private:
     FormatContext *stream;
   };
 
-public:
-  void ask2quit();
-
 private:
   int init_ffmpeg_context();
 

@@ -24,8 +24,6 @@ public:
 
   int loop();
 
-  void ask2quit();
-
 public:
   static int create_segment(const std::string &req_segment);
   static int access_m3u8(const std::string &req_m3u8);

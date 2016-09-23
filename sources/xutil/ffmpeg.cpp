@@ -238,7 +238,7 @@ void priv_set_pts_info(Stream *s, int pts_wrap_bits,
 {
   if (pts_num <= 0 || pts_den <= 0) {
     LOGE("Ignoring attempt to set invalid timebase %d/%d for st:%d",
-        pts_num, pts_den, s->index);
+         pts_num, pts_den, s->index);
     return;
   }
   s->time_base.num = pts_num;
@@ -453,7 +453,7 @@ int parser_parse2(CodecParserContext *s,
 
   if (!(s->flags & PARSER_FLAG_FETCHED_OFFSET)) {
     s->next_frame_offset =
-      s->cur_offset        = pos;
+    s->cur_offset        = pos;
     s->flags            |= PARSER_FLAG_FETCHED_OFFSET;
   }
 
@@ -535,7 +535,7 @@ void fetch_timestamp(CodecParserContext *s, int off, int remove)
   int i;
 
   s->dts    =
-    s->pts    = -1;
+  s->pts    = -1;
   s->pos    = -1;
   s->offset = 0;
   for (i = 0; i < PARSER_PTS_NB; i++) {
@@ -956,7 +956,7 @@ uint8_t *h264_decode_nal(H264Context *h, const uint8_t *src,
                                      wanted_size);
     if (!p) {
       LOGE("realloc for rbsp_buffer[%d] failed: %s",
-          bufidx, ERRNOMSG);
+           bufidx, ERRNOMSG);
       return NULL;
     }
     memset(p, 0, wanted_size);
@@ -1190,7 +1190,7 @@ next_non_null:
   this_pktl->next = *next_point;
 
   st->last_in_packet_buffer =
-    *next_point = this_pktl;
+                *next_point = this_pktl;
 
   return 0;
 }
@@ -1201,7 +1201,7 @@ int interleave_compare_dts(FormatContext *s, Packet *next,
   Stream *st  = s->streams[pkt->stream_index];
   Stream *st2 = s->streams[next->stream_index];
   int comp    = av_compare_ts(next->dts, st2->time_base, pkt->dts,
-      st->time_base);
+                              st->time_base);
 
   if (comp == 0)
     return pkt->stream_index < next->stream_index;
@@ -1300,7 +1300,7 @@ int format_find_stream_info(FormatContext *ic)
 
 #ifdef XDEBUG
   LOGD("Before format_find_stream_info() pos: %lld",
-      old_offset);
+       old_offset);
 #endif
 
   for (i = 0; i < ic->nb_streams; ++i) {
@@ -1326,7 +1326,7 @@ int format_find_stream_info(FormatContext *ic)
   count = 0;
   read_size = 0;
   for ( ; ; ) {
-    if (ic->quit) {
+    if (*ic->watch_variable) {
       ret = -1;
       break;
     }
@@ -1395,7 +1395,7 @@ int format_find_stream_info(FormatContext *ic)
 out:
 #ifdef XDEBUG
   LOGD("After format_find_stream_info() pos: %lld",
-      ic->file->cursor());
+       ic->file->cursor());
 #endif
   return ret;
 }
@@ -1487,10 +1487,10 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
     LOGI("interleaved_write_frame() FLUSH");
 #endif
     flush = 1;
-    ic->quit = 1;
+    *ic->watch_variable = true;
   }
 
-  while (!ic->quit) {
+  while (!*ic->watch_variable) {
     Packet opkt;
     int ret = interleave_packet_per_dts(ic, &opkt, pkt, flush);
     if (pkt) {
@@ -1512,7 +1512,7 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
       Frame frame;
       if (frame.make_frame(opkt.pts, opkt.data, opkt.size, true) < 0 ||
           ic->cb(ic->opaque, &frame, is_video) < 0) {
-        ic->quit = 1;
+        *ic->watch_variable = true;
         ret = -1;
       }
       if (ret >= 0)
@@ -1628,7 +1628,7 @@ int write_trailer(FormatContext *s)
       Frame frame;
       if (frame.make_frame(opkt.pts, opkt.data, opkt.size, true) < 0 ||
           s->cb(s->opaque, &frame, is_video) < 0) {
-        s->quit = 1;
+        *s->watch_variable = true;
         ret = -1;
       }
       if (ret >= 0)

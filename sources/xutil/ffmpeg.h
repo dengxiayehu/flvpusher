@@ -180,7 +180,7 @@ struct FormatContext {
   PacketList *parse_queue_end;
   int max_interleave_delta;
   void *priv_data;
-  volatile int quit;
+  volatile bool *watch_variable;
   int64_t ts_offset;
   AVRational otime_base;
   int max_delay;

@@ -1,8 +1,8 @@
-#include "mp4_parser.h"
-
 #include <cstdlib>
-
 #include <xlog.h>
+
+#include "mp4_parser.h"
+#include "common/common.h"
 
 //#define XDEBUG
 
@@ -405,12 +405,6 @@ int MP4Parser::read_frame(File &file, Track *trak,
 
 /////////////////////////////////////////////////////////////
 
-void MP4Parser::ask2quit()
-{
-  if (m_mp4)
-    m_mp4->stream->quit = 1;
-}
-
 int MP4Parser::mp4_init(MP4Context *&mp4, File *file)
 {
   FormatContext *ic = (FormatContext *) calloc(1, sizeof(FormatContext));
@@ -472,7 +466,7 @@ int MP4Parser::process(void *opaque, FrameCb cb)
   ic->opaque  = opaque;
 
   unsigned i;
-  while (!ic->quit) {
+  while (!*ic->watch_variable) {
     i = choose_output(ic);
 
     if (process_input(ic, i) < 0)
@@ -494,6 +488,7 @@ int MP4Parser::init_ffmpeg_context()
   memcpy(&status_bak, &m_status, sizeof(m_status));
 
   FormatContext *ic = m_mp4->stream;
+  ic->watch_variable = interrupt_variable();
   for (unsigned i = 0; i < NB_TRACK; ++i) {
     Stream *st = format_new_stream(ic);
     if (!st) return -1;

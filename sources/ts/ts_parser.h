@@ -25,8 +25,6 @@ public:
 
   int process(void *opaque, FrameCb cb);
 
-  void ask2quit();
-
   int64_t get_start_time() const;
 
 private:

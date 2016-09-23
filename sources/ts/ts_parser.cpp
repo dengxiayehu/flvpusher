@@ -210,6 +210,7 @@ int TSParser::ts_init(TSContext *&ts, xfile::File *file)
         ERRNOMSG);
     return -1;
   }
+  ic->watch_variable = interrupt_variable();
   ic->start_time = -1;
   ic->file = file;
   ic->max_interleave_delta = 10000000;
@@ -253,7 +254,7 @@ int TSParser::process(void *opaque, FrameCb cb)
   ic->cb      = cb;
   ic->opaque  = opaque;
 
-  while (!ic->quit) {
+  while (!*ic->watch_variable) {
     i = choose_output(ic);
 
     ret = process_input(ic, i);
@@ -1349,12 +1350,6 @@ void TSParser::ts_find_stream_type(Stream *st,
     }
 
   LOGW("stream_type(%x) not supported", stream_type);
-}
-
-void TSParser::ask2quit()
-{
-  if (m_ts)
-    m_ts->stream->quit = 1;
 }
 
 int64_t TSParser::get_start_time() const

@@ -587,7 +587,7 @@ int RtmpSink::send_to_network(RTMPContext *rt, const uint8_t *buf, int size)
 
   do {
     ret = xnet::network_wait_fd(RTMP_Socket(rt->rtmp), 1, 100);
-  } while (ret == EAGAIN && !rt->quit);
+  } while (ret == EAGAIN && !interrupt_cb());
 
   if (ret)
     return ret;
