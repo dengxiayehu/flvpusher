@@ -5,6 +5,7 @@
 #include <xcurl.h>
 #include <xfile.h>
 
+#include "common/common.h"
 #include "web_server.h"
 #include "hls/hls_segmenter.h"
 #include "stream_types.h"
@@ -59,7 +60,6 @@ private:
   Config *m_conf;
   RecursiveMutex m_mutex;
   vector<ServeParam *> m_serve_param;
-  volatile bool m_quit;
   DECL_THREAD_ROUTINE(WebServerImpl, heartbeat_routine);
   Thread *m_heartbeat_thrd;
   DECL_THREAD_ROUTINE(WebServerImpl, recycle_routine);
@@ -67,7 +67,7 @@ private:
 };
 
 WebServerImpl::WebServerImpl(Config *conf) :
-  m_conf(conf), m_quit(false), m_heartbeat_thrd(NULL), m_recycle_thrd(NULL)
+  m_conf(conf), m_heartbeat_thrd(NULL), m_recycle_thrd(NULL)
 {
   memset(options, 0, sizeof(options));
 }
@@ -160,8 +160,8 @@ int WebServerImpl::pulse() {
 
 int WebServerImpl::stop()
 {
-  if (!m_quit) {
-    m_quit = true;
+  if (!interrupt_cb()) {
+    set_interrupt(true);
 
     pthread_kill(m_heartbeat_thrd->get_tid(), SIGALRM);
     pthread_kill(m_recycle_thrd->get_tid(), SIGALRM);
@@ -239,7 +239,7 @@ int WebServerImpl::ev_handler(struct mg_connection *conn, enum mg_event ev)
 const static char *html_index = "<html><head><title>Welcome to flvpusher!</title><style>body{width:35em;margin:0 auto;font-family:Tahoma,Verdana,Arial,sans-serif;}</style></head><body><h1>Welcome to flvpusher!</h1><p>If you see this page, the server is successfully installed and working.</p><p><em>Thank you for using.</em></p></body></html>";
 int WebServerImpl::serve_request(struct mg_connection *conn)
 {
-  if (IMPL(conn->server_param)->m_quit)
+  if (interrupt_cb())
     return MG_FALSE;
 
   if (!strcmp(conn->request_method, "GET") &&
@@ -307,7 +307,7 @@ bool WebServerImpl::is_index(const char *uri)
 void *WebServerImpl::serve(void *param)
 {
   ServeParam *sp = (ServeParam *) param;
-  while (!IMPL(sp->user)->m_quit) {
+  while (!interrupt_cb()) {
     mg_poll_server(sp->server, 1000);
   }
   return NULL;
@@ -338,7 +338,7 @@ void *WebServerImpl::heartbeat_routine(void *arg)
   bool heartbeat_failed = false;
   auto_ptr<Curl> curl(new Curl);
 
-  while (!m_quit && !heartbeat_failed) {
+  while (!interrupt_cb() && !heartbeat_failed) {
     Curl::request *req =
       Curl::request::build(Curl::OPTIONS,
                            STR(sprintf_("http://127.0.0.1:%s", get_option(options, "listening_port"))),
@@ -367,13 +367,13 @@ void *WebServerImpl::heartbeat_routine(void *arg)
     }
   }
 
-  if (!m_quit && heartbeat_failed) {
+  if (!interrupt_cb() && heartbeat_failed) {
     LOGE("heartbeat routine failed");
 
     if (raise(SIGINT) < 0) {
       LOGE("raise SIGINT to stop self failed: %s",
            ERRNOMSG);
-      m_quit = true;
+      set_interrupt(true);
       sleep_(1000);
       exit(EXIT_FAILURE);
     }
@@ -384,14 +384,14 @@ void *WebServerImpl::heartbeat_routine(void *arg)
 
 void *WebServerImpl::recycle_routine(void *arg)
 {
-  while (!m_quit) {
+  while (!interrupt_cb()) {
     int hls_scan_interval = DEFAULT_HLS_SCAN_INTERVAL;
     if (m_conf) {
       GET_CONFIG_INT(m_conf, hls_scan_interval);
     }
     sleep_(hls_scan_interval*1000);
 
-    if (m_quit)
+    if (interrupt_cb())
       break;
 
     recycle(get_option(options, "document_root"));

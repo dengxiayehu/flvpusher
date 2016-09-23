@@ -16,8 +16,6 @@ public:
 
   virtual int loop();
 
-  virtual void ask2quit();
-
 private:
   static int parsed_frame_cb(void *, xmedia::Frame *, int);
 

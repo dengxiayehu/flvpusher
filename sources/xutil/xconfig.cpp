@@ -29,7 +29,7 @@ public:
 
 public:
   int load(const char *config_path);
-  int start_monitor();
+  int start_monitor(volatile bool *watch_variable);
   int stop_monitor();
 
 private:
@@ -63,7 +63,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ConfigImpl);
   DECL_THREAD_ROUTINE(ConfigImpl, monitor_routine);
   Thread *m_thrd;
-  volatile bool m_quit_monitor;
+  volatile bool *m_watch_variable;
   map<ConfigUpdateCB, void *> m_cb_map;
   set<string> m_reg;
   map<string, ConfigItem *> m_map;
@@ -189,7 +189,7 @@ again:
 }
 
 ConfigImpl::ConfigImpl() :
-  m_thrd(NULL), m_quit_monitor(false)
+  m_thrd(NULL), m_watch_variable(NULL)
 {
   m_ctl[0] = m_ctl[1] = -1;
 }
@@ -393,8 +393,8 @@ int ConfigImpl::load(const char *config_path)
     }
 item_done:
     item = new ConfigItem(name, value,
-        type[0] ? type : NULL, def[0] ? def : NULL,
-        range[0] ? range : NULL, note[0] ? note : NULL);
+                          type[0] ? type : NULL, def[0] ? def : NULL,
+                          range[0] ? range : NULL, note[0] ? note : NULL);
     if (!item->is_valid()) goto skip;
     if (has_config(name)) {
       if (!m_cb_map.empty() &&
@@ -418,15 +418,17 @@ skip:
   return 0;
 }
 
-int ConfigImpl::start_monitor()
+int ConfigImpl::start_monitor(volatile bool *watch_variable)
 {
+  assert(watch_variable);
+  m_watch_variable = watch_variable;
   m_thrd = CREATE_THREAD_ROUTINE(monitor_routine, NULL, false);
   return 0;
 }
 
 int ConfigImpl::stop_monitor()
 {
-  m_quit_monitor = true;
+  *m_watch_variable = true;
   if (m_ctl[0] != -1) {
     const char str[] = "wakeup";
     send(m_ctl[0], str, sizeof(str), MSG_NOSIGNAL);
@@ -454,12 +456,12 @@ void *ConfigImpl::monitor_routine(void *arg)
     LOGE("socketpair failed for ctl: %s", ERRNOMSG);
   }
 
-  while (!m_quit_monitor) {
+  while (!*m_watch_variable) {
     if (wd < 0) {
       AutoLock _l(m_mutex);
 
       if ((wd = inotify_add_watch(fd, STR(m_path),
-              IN_IGNORED|IN_CLOSE_WRITE|IN_MOVE_SELF|IN_MOVE)) < 0) {
+                                  IN_IGNORED|IN_CLOSE_WRITE|IN_MOVE_SELF|IN_MOVE)) < 0) {
         LOGE("inotify_add_watch() failed: %s", ERRNOMSG);
         goto out;
       }
@@ -476,7 +478,7 @@ void *ConfigImpl::monitor_routine(void *arg)
       break;
     }
 
-    if (m_quit_monitor)
+    if (*m_watch_variable)
       break;
 
     if (m_ctl[1] != -1 && FD_ISSET(m_ctl[1], &rfd)) {
@@ -526,14 +528,14 @@ out:
   return (void *) NULL;
 }
 
-Config *create_config(const char *config_path)
+Config *create_config(const char *config_path, volatile bool *watch_variable)
 {
-  ConfigImpl *impl = new ConfigImpl;
+  ConfigImpl *impl = new ConfigImpl();
   if (impl->load(config_path) < 0) {
     LOGE("load config \"%s\" failed", config_path);
     goto bail;
   }
-  impl->start_monitor();
+  impl->start_monitor(watch_variable);
   return impl;
 
 bail:

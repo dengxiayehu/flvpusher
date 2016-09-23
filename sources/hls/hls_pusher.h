@@ -15,7 +15,6 @@ public:
   virtual ~HLSPusher();
 
   virtual int loop();
-  virtual void ask2quit();
 
 private:
   enum { AES_SIZE = 16 };
@@ -167,7 +166,6 @@ private:
   xconfig::Config *m_conf;
   stream_sys *m_sys;
   xutil::RecursiveMutex m_mutex;
-  TSPusher *m_ts_pusher;
   int m_tm_offset;
 };
 

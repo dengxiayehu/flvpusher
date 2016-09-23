@@ -20,8 +20,6 @@ public:
 
   int main(int argc, char *argv[]);
 
-  void ask2quit();
-
   static App *get_instance() {
     if (!app) {
       xutil::AutoLock l(mutex);
@@ -72,8 +70,6 @@ private:
   MediaSink *m_sink;
   MediaPusher *m_pusher;
   HLSSegmenter*m_hls;
-
-  volatile bool m_quit;
 
   xconfig::Config *m_conf;
 };

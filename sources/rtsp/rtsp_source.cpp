@@ -27,7 +27,7 @@ int RtspSource::loop()
     return -1;
   }
 
-  return m_client->loop(&m_quit);
+  return m_client->loop(interrupt_variable());
 }
 
 int RtspSource::prepare()

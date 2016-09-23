@@ -16,8 +16,6 @@ public:
 
   virtual int loop();
 
-  virtual void ask2quit();
-
   // Init parser in advance, this function is also called by loop()
   int init_parser();
 

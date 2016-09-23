@@ -6,6 +6,7 @@
 #include <xmedia.h>
 #include <xfile.h>
 
+#include "common/common.h"
 #include "ts/ts_muxer.h"
 
 namespace flvpusher {
@@ -17,7 +18,6 @@ public:
   MediaPusher(const std::string &input, MediaSink *&sink);
   virtual ~MediaPusher();
 
-  virtual void ask2quit() { m_quit = true; }
   virtual int loop() = 0;
 
   int dump_video(const std::string &path, bool append = false);
@@ -35,7 +35,6 @@ protected:
 protected:
   std::string m_input;
   MediaSink *m_sink;
-  volatile bool m_quit;
 
   xfile::File m_dvf;
   xfile::File m_daf;

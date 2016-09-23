@@ -58,13 +58,6 @@ int MP4Pusher1::loop()
   return m_parser->process(this, parsed_frame_cb);
 }
 
-void MP4Pusher1::ask2quit()
-{
-  if (m_parser)
-    m_parser->ask2quit();
-  m_quit = true;
-}
-
 int MP4Pusher1::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 {
   MP4Pusher1 *obj = (MP4Pusher1 *) opaque;

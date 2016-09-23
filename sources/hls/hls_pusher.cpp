@@ -535,7 +535,7 @@ HLSPusher::hls_stream *HLSPusher::stream_sys::find_hls(hls_stream *hls_new)
 
 HLSPusher::HLSPusher(const string &input, MediaSink *&sink, Config *conf) :
   MediaPusher(input, sink),
-  m_conf(conf), m_sys(NULL), m_ts_pusher(NULL),
+  m_conf(conf), m_sys(NULL),
   m_tm_offset(-1)
 {
 }
@@ -619,16 +619,16 @@ int HLSPusher::loop()
     m_sys->get_hls(m_sys->playback.stream);
   assert(hls);
 
-  while (!m_quit) {
+  while (!interrupt_cb()) {
     if (m_sys->download.segment <= m_sys->playback.segment) { // Quick check
       AutoLock _l(m_sys->download.mutex);
       while ((m_sys->download.segment <= m_sys->playback.segment) &&
-          !m_quit) {
+             !interrupt_cb()) {
         m_sys->download.wait.wait();
       }
     }
 
-    if (m_quit)
+    if (interrupt_cb())
       break;
 
     hls->mutex.lock();
@@ -638,7 +638,7 @@ int HLSPusher::loop()
 
     if (!seg->is_downloaded()) {
       LOGW("Skip segment -- %s", STR(seg->to_string()));
-      short_snap(seg->duration*1000, &m_quit);
+      short_snap(seg->duration*1000, interrupt_variable());
       goto skip;
     }
 
@@ -661,26 +661,13 @@ skip:
     m_sys->download.wait.signal();
   }
 
-  m_quit = true;
+  set_interrupt(true);
   Curl::cleanup();
   return ret;
 }
 
-void HLSPusher::ask2quit()
-{
-  m_quit = true;
-  if (m_ts_pusher) {
-    m_ts_pusher->ask2quit();
-  }
-  m_sys->download.wait.signal();
-}
-
 int HLSPusher::live_segment(segment *seg)
 {
-  // In case user wants to stop pushing this segment,
-  // we will response this in ask2quit()
-  m_ts_pusher = seg->ts_pusher;
-
   // Normally we need to adjust the segment's timestamp
   // to start with 0
   if (m_tm_offset == -1) {
@@ -689,8 +676,8 @@ int HLSPusher::live_segment(segment *seg)
   }
 
   int ret = 0;
-  m_ts_pusher->set_timestamp_offset(m_tm_offset);
-  if (m_ts_pusher->loop() < 0) {
+  seg->ts_pusher->set_timestamp_offset(m_tm_offset);
+  if (seg->ts_pusher->loop() < 0) {
     ret = -1;
   }
   if (!ret && !m_tspath.empty()) {
@@ -700,8 +687,6 @@ int HLSPusher::live_segment(segment *seg)
   rm_(seg->tempts);
   SAFE_DELETE(seg->iobuf);
   SAFE_DELETE(seg->ts_pusher);
-
-  m_ts_pusher = NULL;
   return ret;
 }
 
@@ -1392,7 +1377,7 @@ void *HLSPusher::stream_sys::hls_reload_routine(void *arg)
   assert(live);
 
   double wait = 1.0;
-  while (!pusher->m_quit) {
+  while (!interrupt_cb()) {
     uint64_t now = get_time_now();
     if (now >= playlist.wakeup) {
       if (reload_playlist() < 0) {
@@ -1422,7 +1407,7 @@ void *HLSPusher::stream_sys::hls_reload_routine(void *arg)
       }
     }
 
-    short_snap(playlist.wakeup - now, &pusher->m_quit);
+    short_snap(playlist.wakeup - now, interrupt_variable());
   }
 
   LOGD("hls_reload_routine for \"%s\" ended", STR(pusher->m_input));
@@ -1433,7 +1418,7 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
 {
   LOGD("hls_routine for \"%s\" started", STR(pusher->m_input));
 
-  while (!pusher->m_quit) {
+  while (!interrupt_cb()) {
     hls_stream *hls = get_hls(download.stream);
     assert(hls);
 
@@ -1446,14 +1431,14 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
       AutoLock _l(download.mutex);
       while (((download.segment - playback.segment > 6) ||
               (download.segment >= count)) &&
-             !pusher->m_quit) {
+             !interrupt_cb()) {
         download.wait.wait();
-        if (live || pusher->m_quit)
+        if (live || interrupt_cb())
           break;
       }
     }
 
-    if (pusher->m_quit)
+    if (interrupt_cb())
       break;
 
     hls->mutex.lock();
@@ -1462,7 +1447,7 @@ void *HLSPusher::stream_sys::hls_routine(void *arg)
 
     if (seg &&
         hls->download_segment_data(this, seg, download.stream) < 0) {
-      if (pusher->m_quit)
+      if (interrupt_cb())
         break;
       // Fall through
     }

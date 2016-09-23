@@ -71,8 +71,6 @@ private:
   } u;
 
   HLSInfo m_info;
-
-  volatile bool m_quit;
 };
 
 }

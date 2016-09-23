@@ -35,8 +35,7 @@ HLSSegmenter::HLSSegmenter(const string &hls_playlist,
                            const int hls_time) :
   m_hls_playlist(hls_playlist),
   m_hls_time(hls_time),
-  m_mf(UNSUPPORTED),
-  m_quit(false)
+  m_mf(UNSUPPORTED)
 {
   bzero(&u, sizeof(u));
 }
@@ -133,11 +132,6 @@ int HLSSegmenter::loop()
   return 0;
 }
 
-void HLSSegmenter::ask2quit()
-{
-  m_quit = true;
-}
-
 int HLSSegmenter::create_m3u8(bool create_ts)
 {
   auto_ptr<File> pl_file(new File);
@@ -165,7 +159,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
            seek_file->get_path());
       return -1;
     }
-    while (!m_quit &&
+    while (!interrupt_cb() &&
            !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
       bool is_video = !check_h264_startcode(pkt);
       bool is_key = !is_video ||
@@ -213,7 +207,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
       tsmuxer = new TSMuxer;
       tsmuxer->set_file(filename, (AVRational) {1001, 30000});
     }
-    while (!m_quit && !u.flv.parser->eof()) {
+    while (!interrupt_cb() && !u.flv.parser->eof()) {
       FLVParser::FLVTag *tag = u.flv.parser->alloc_tag();
       if (u.flv.parser->read_tag(tag) < 0) {
         if (tag->hdr.typ == FLVParser::TAG_SCRIPT) {
@@ -369,7 +363,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
 
     Packet pkt1, *pkt = &pkt1;
     tsmuxer->set_file(segment_tmp, u.mp4.parser->get_vtime_base());
-    while (!m_quit &&
+    while (!interrupt_cb() &&
            !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
       bool is_video = !check_h264_startcode(pkt);
       bool is_key = !is_video ||
@@ -411,7 +405,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
 
     tsmuxer->set_file(segment_tmp, (AVRational) {1001, 30000});
 
-    while (!m_quit && !u.flv.parser->eof()) {
+    while (!interrupt_cb() && !u.flv.parser->eof()) {
       FLVParser::FLVTag *tag = u.flv.parser->alloc_tag();
 
       if (u.flv.parser->read_tag(tag) < 0) {
@@ -467,7 +461,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
           is_key &&
           av_compare_ts(pkt_pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0 &&
           got_frame) {
-        m_quit = true;
+        set_interrupt(true);
         goto done;
       }
       END

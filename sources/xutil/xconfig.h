@@ -38,7 +38,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(Config);
 };
 
-Config *create_config(const char *config_path);
+Config *create_config(const char *config_path, volatile bool *watch_variable);
 void destroy_config(Config **config);
 
 #define GET_CONFIG_INT(c, x) do { \

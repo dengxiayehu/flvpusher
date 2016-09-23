@@ -7,8 +7,7 @@ namespace flvpusher {
 
 MediaSink::MediaSink(const std::string &flvpath) :
   m_vparser(new VideoRawParser),
-  m_aparser(new AudioRawParser),
-  m_quit(false)
+  m_aparser(new AudioRawParser)
 {
   if (!flvpath.empty()) {
     if (m_flvmuxer.set_file(flvpath) < 0) {

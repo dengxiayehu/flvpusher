@@ -217,7 +217,7 @@ int RtmpSource::loop()
                                    m_vstrmer->get_strm(),
                                    m_vstrmer->get_strm_length()) < 0) {
               LOGE("Send video data to rtmpserver failed");
-              m_quit = true;
+              set_interrupt(true);
             }
             break;
 
@@ -249,7 +249,7 @@ int RtmpSource::loop()
                                    m_astrmer->get_strm(),
                                    m_astrmer->get_strm_length()) < 0) {
               LOGE("Send audio data to rtmpserver failed");
-              m_quit = true;
+              set_interrupt(true);
             }
             break;
 
@@ -271,7 +271,7 @@ int RtmpSource::loop()
     } else {
       LOGW("Rtmp zero read, maybe source disconnected");
     }
-  } while (!m_quit &&
+  } while (!interrupt_cb() &&
            nread > -1 &&
            RTMP_IsConnected(m_rtmp) && !RTMP_IsTimedout(m_rtmp));
 

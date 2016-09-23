@@ -37,7 +37,7 @@ int FLVPusher::loop()
 
   LOGI("Pushing flv file \"%s\" ..", STR(m_input));
 
-  while (!parser.eof() && !m_quit) {
+  while (!parser.eof() && !interrupt_cb()) {
     FLVParser::FLVTag *tag = parser.alloc_tag();
     if (parser.read_tag(tag) < 0) {
       if (tag->hdr.typ == FLVParser::TAG_SCRIPT) {
@@ -54,7 +54,7 @@ int FLVPusher::loop()
 
     frame_wait_done(timestamp);
 
-    if (m_quit) {
+    if (interrupt_cb()) {
       parser.free_tag(tag);
       break;
     }
@@ -70,7 +70,7 @@ int FLVPusher::loop()
                                m_vstrmer->get_strm(), m_vstrmer->get_strm_length()) < 0) {
           LOGE("Send video data to %sserver failed",
                STR(m_sink->type_str()));
-          m_quit = true;
+          set_interrupt(true);
         }
         break;
 
@@ -84,7 +84,7 @@ int FLVPusher::loop()
                                m_astrmer->get_strm(), m_astrmer->get_strm_length()) < 0) {
           LOGE("Send audio data to %sserver failed",
                STR(m_sink->type_str()));
-          m_quit = true;
+          set_interrupt(true);
         }
         break;
 

@@ -112,13 +112,13 @@ int RtspSink::connect(const std::string &liveurl)
 
 void *RtspSink::proc_routine(void *arg)
 {
-  m_client->loop(&m_quit);
+  m_client->loop(interrupt_variable());
   return (void *) NULL;
 }
 
 int RtspSink::disconnect()
 {
-  m_quit = true;
+  set_interrupt(true);
 
   if (m_video->sink)
     m_video->sink->stop_playing();

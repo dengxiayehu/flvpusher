@@ -80,13 +80,6 @@ int TSPusher::loop()
   return m_parser->process(this, parsed_frame_cb);
 }
 
-void TSPusher::ask2quit()
-{
-  if (m_parser)
-    m_parser->ask2quit(); // In case it gets stuck in format_find_stream_info()
-  m_quit = true;
-}
-
 int TSPusher::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 {
   TSPusher *obj = (TSPusher *) opaque;

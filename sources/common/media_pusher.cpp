@@ -8,7 +8,6 @@ namespace flvpusher {
 MediaPusher::MediaPusher(const std::string &input, MediaSink *&sink) :
   m_input(input),
   m_sink(sink),
-  m_quit(false),
   m_itime_base((AVRational) {1001, 24000}),
   m_start_time(0)
 {
@@ -83,7 +82,7 @@ int MediaPusher::frame_wait_done(int timestamp)
     m_start_timestamp = timestamp;
   }
 
-  while (!m_quit) {
+  while (!interrupt_cb()) {
     uint64_t now = get_time_now();
     if ((int) (now - m_start_time) >= timestamp - m_start_timestamp) {
       // frame wait done
@@ -93,7 +92,7 @@ int MediaPusher::frame_wait_done(int timestamp)
     sleep_(5);
   }
 
-  return m_quit ? -1 : 0;
+  return interrupt_cb() ? -1 : 0;
 }
 
 }

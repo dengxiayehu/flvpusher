@@ -39,7 +39,6 @@ App::App() :
   m_sink(NULL),
   m_pusher(NULL),
   m_hls(NULL),
-  m_quit(false),
   m_conf(NULL)
 {
   if (init() < 0) {
@@ -85,15 +84,6 @@ void App::cleanup()
   xlog::log_close();
 }
 
-void App::ask2quit()
-{
-  m_quit = true;
-
-  if (m_pusher) m_pusher->ask2quit();
-  if (m_sink) m_sink->ask2quit();
-  if (m_hls) m_hls->ask2quit();
-}
-
 int App::load_cfg(std::string cfg_file)
 {
   if (!is_path_absolute(STR(cfg_file))) {
@@ -105,7 +95,7 @@ int App::load_cfg(std::string cfg_file)
     return 0;
   }
 
-  m_conf = create_config(STR(cfg_file));
+  m_conf = create_config(STR(cfg_file), interrupt_variable());
   if (!m_conf) {
     LOGE("create config failed");
     return -1;
@@ -373,12 +363,12 @@ int App::main(int argc, char *argv[])
       return -1;
     }
 
-    while (!m_quit) {
+    while (!interrupt_cb()) {
       if (webserver->pulse() < 0) {
         ret = -1;
         break;
       }
-      short_snap(1000, &m_quit);
+      short_snap(1000, interrupt_variable());
     }
 
     webserver->stop();
@@ -408,9 +398,9 @@ int App::main(int argc, char *argv[])
     return m_loop ? m_hls->loop() : 0;
   }
 
-  while (!m_quit) {
+  while (!interrupt_cb()) {
     foreach(input, it) {
-      if (m_quit) break;
+      if (interrupt_cb()) break;
 
       if (start_with(*it, "rtmp://")) {
         m_pusher = new RtmpSource(*it, m_sink);
@@ -450,7 +440,7 @@ int App::main(int argc, char *argv[])
 
     if (!m_loop) {
       // No need to loop push, quit
-      ask2quit();
+      set_interrupt(true);
       break;
     }
   }
@@ -461,7 +451,7 @@ int App::main(int argc, char *argv[])
 static void sighandler(int signo)
 {
   if (signo == SIGINT) {
-    App::get_instance()->ask2quit();
+    set_interrupt(true);
   }
 }
 

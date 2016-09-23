@@ -13,6 +13,8 @@ typedef struct Nalu {
   std::vector<NaluItem *> *dat;
 } Nalu;
 
+/////////////////////////////////////////////////////////////
+
 void rtmp_log(int level, const char *fmt, va_list args);
 
 enum RTMPChannel {
@@ -22,6 +24,15 @@ enum RTMPChannel {
   RTMP_VIDEO_CHANNEL   = 6,
   RTMP_SOURCE_CHANNEL  = 8,
 };
+
+/////////////////////////////////////////////////////////////
+
+bool interrupt_cb();
+
+typedef bool (*InterruptCB)();
+
+void set_interrupt(bool b);
+volatile bool *interrupt_variable();
 
 }
 
