@@ -347,8 +347,13 @@ int FLVParser::handle_audio(FLVAudioTagData &adat,
   adat.aac.typ = *p++;
   switch (adat.aac.typ) {
     case 0: // AAC Sequence Header (2 bytes)
-      memcpy(adat.aac.asc.dat, p, 2);
-      p += 2;
+      // Set default value to asc
+      generate_asc(adat.aac.asc,
+                   str_to_audioprof("LC"), str_to_samplerate_idx("44100"), 2);
+      if (len >= 4) {
+        memcpy(adat.aac.asc.dat, p, 2);
+        p += 2;
+      }
 #ifdef XDEBUG
       print_asc(adat.aac.asc);
 #endif

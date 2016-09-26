@@ -79,7 +79,7 @@ int FLVPusher::loop()
         if (m_astrmer->get_strm_length() == 0)
           break;
         on_frame(timestamp,
-            m_astrmer->get_strm(), m_astrmer->get_strm_length(), 0);
+                 m_astrmer->get_strm(), m_astrmer->get_strm_length(), 0);
         if (m_sink->send_audio(timestamp,
                                m_astrmer->get_strm(), m_astrmer->get_strm_length()) < 0) {
           LOGE("Send audio data to %sserver failed",
