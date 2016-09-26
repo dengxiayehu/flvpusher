@@ -25,6 +25,32 @@ static CodecParser parsers[] = {
   { CODEC_ID_H264, sizeof(H264Context),     h264_parse_init, h264_parse, h264_parse_close, },
 };
 
+int Packet::is_video() const
+{
+  if (STARTCODE4(data)) {
+    // Video frame's data begins with nalu startcode
+    return 1;
+  }
+  return 0;
+}
+
+int Packet::clone(Packet *pkt, bool reuse_buffer)
+{
+  if (!pkt)
+    return -1;
+
+  *this = *pkt;
+
+  if (!reuse_buffer) {
+    data = (uint8_t *) malloc(sizeof(uint8_t) * pkt->size);
+    if (!data) return -1;
+    memcpy(data, pkt->data, pkt->size);
+  } else {
+    pkt->data = NULL;
+  }
+  return 0;
+}
+
 AVRational av_mul_q(AVRational b, AVRational c)
 {
   av_reduce(&b.num, &b.den,
@@ -1511,7 +1537,7 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
 
       Frame frame;
       if (frame.make_frame(opkt.pts, opkt.data, opkt.size, true) < 0 ||
-          ic->cb(ic->opaque, &frame, is_video) < 0) {
+          (ret = ic->cb(ic->opaque, &frame, is_video)) < 0) {
         *ic->watch_variable = true;
         ret = -1;
       }

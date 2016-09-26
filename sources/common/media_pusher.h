@@ -30,7 +30,7 @@ public:
 protected:
   void set_itime_base(AVRational tb) { m_itime_base = tb; }
 
-  int frame_wait_done(int timestamp);
+  int frame_wait_done(int *timestamp);
 
 protected:
   std::string m_input;

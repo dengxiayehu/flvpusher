@@ -63,7 +63,7 @@ int MP4Pusher1::parsed_frame_cb(void *opaque, Frame *f, int is_video)
   MP4Pusher1 *obj = (MP4Pusher1 *) opaque;
   int ret = 0;
 
-  if (obj->frame_wait_done(f->m_ts) < 0)
+  if (obj->frame_wait_done(&f->m_ts) < 0)
     return -1;
 
   obj->on_frame(f->m_ts, f->m_dat, f->m_dat_len, is_video);

@@ -87,7 +87,7 @@ int TSPusher::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 
   f->m_ts += obj->m_tm_offset;
 
-  if (obj->frame_wait_done(f->m_ts) < 0)
+  if (obj->frame_wait_done(&f->m_ts) < 0)
     return -1;
 
   obj->on_frame(f->m_ts, f->m_dat, f->m_dat_len, is_video);

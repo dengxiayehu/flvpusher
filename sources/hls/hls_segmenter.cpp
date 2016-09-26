@@ -523,7 +523,7 @@ int HLSSegmenter::create_segment(const std::string &req_segment)
     // Continue to back-skip HLS_URI_SEPERATOR
     int hls_uri_seperator_len = strlen(HLS_URI_SEPERATOR);
     if (strncmp(p - hls_uri_seperator_len, HLS_URI_SEPERATOR,
-          hls_uri_seperator_len) != 0) {
+                hls_uri_seperator_len) != 0) {
       LOGE("Bad ts_segemnt request \"%s\"", STR(req_segment));
       return -1;
     }
@@ -533,7 +533,7 @@ int HLSSegmenter::create_segment(const std::string &req_segment)
     uint8_t hls_time;
 
     BEGIN
-      File info_file;
+    File info_file;
     if (!info_file.open(hls_info_path, "rb")) {
       return -1;
     }

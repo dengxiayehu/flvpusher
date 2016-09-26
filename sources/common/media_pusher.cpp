@@ -75,21 +75,23 @@ int MediaPusher::on_frame(const int32_t ts,
   return 0;
 }
 
-int MediaPusher::frame_wait_done(int timestamp)
+int MediaPusher::frame_wait_done(int *timestamp)
 {
   if (m_start_time == 0) {
     m_start_time = get_time_now();
-    m_start_timestamp = timestamp;
+    m_start_timestamp = *timestamp;
   }
+
+  *timestamp -= m_start_timestamp;
 
   while (!interrupt_cb()) {
     uint64_t now = get_time_now();
-    if ((int) (now - m_start_time) >= timestamp - m_start_timestamp) {
+    if ((int) (now - m_start_time) >= *timestamp) {
       // frame wait done
       break;
     }
     // a short sleep then check again
-    sleep_(5);
+    sleep_(10);
   }
 
   return interrupt_cb() ? -1 : 0;

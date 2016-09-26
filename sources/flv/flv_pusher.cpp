@@ -52,7 +52,7 @@ int FLVPusher::loop()
     int32_t timestamp =
       (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
 
-    frame_wait_done(timestamp);
+    frame_wait_done(&timestamp);
 
     if (interrupt_cb()) {
       parser.free_tag(tag);

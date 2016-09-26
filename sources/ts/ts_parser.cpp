@@ -129,9 +129,9 @@ TSParser::~TSParser()
   ts_free(m_ts);
 }
 
-int TSParser::set_file(const std::string &mp4_file, bool hls_segment)
+int TSParser::set_file(const std::string &ts_file, bool hls_segment)
 {
-  if (!m_file.open(mp4_file, "rb"))
+  if (!m_file.open(ts_file, "rb"))
     return -1;
 
   if (init() < 0) {
