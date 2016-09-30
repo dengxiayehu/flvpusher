@@ -291,7 +291,7 @@ void App::usage() const
           "-s, --tspath\n"
           "       dump video&audio into ts\n"
           "-h, --help\n"
-          "       show this help message and quit\n\n\n"
+          "       show this help message and quit\n\n"
           "Sample:\n"
           "1. stream mp4 to rtmpserver (other input sources are the same)\n"
           "$ flvpusher -i ~/Video/omn.mp4 -L rtmp://127.0.0.1:1935/live/va\n\n"
