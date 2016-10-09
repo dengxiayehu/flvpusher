@@ -161,15 +161,11 @@ int HLSSegmenter::create_m3u8(bool create_ts)
     }
     while (!interrupt_cb() &&
            !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
-      bool is_video = !check_h264_startcode(pkt);
-      bool is_key = !is_video ||
-        ((pkt->data[4]&0x1f) == 5 ||
-         (pkt->data[4]&0x1f) == 7);
-      if (is_video)
+      if (pkt->is_video())
         info->duration = (double) (pkt->pts-info->end_pts)*tb.num/tb.den;
       int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * info->number;
-      if (is_video &&
-          is_key &&
+      if (pkt->is_video() &&
+          pkt->is_key() &&
           av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0) {
         if (create_ts)
           SAFE_DELETE(tsmuxer);
@@ -192,7 +188,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         }
       }
       if (create_ts)
-        tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, is_video);
+        tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, pkt->is_video());
       memcpy(rs, u.mp4.parser->m_status, sizeof(rs));
       SAFE_FREE(pkt->data);
     }
@@ -269,8 +265,14 @@ int HLSSegmenter::create_m3u8(bool create_ts)
 
       BEGIN
       bool is_key = !is_video ||
-      ((pkt_data[4]&0x1f) == 5 ||
-       (pkt_data[4]&0x1f) == 7);
+                    ((pkt_data[4]&0x1f) == 5 ||
+                     (pkt_data[4]&0x1f) == 7);
+      if (!is_key) {
+        int nalu_type = pkt_data[4]&0x1f;
+        if (nalu_type == 9)
+          nalu_type = pkt_data[10]&0x1f;
+        is_key = nalu_type == 5 || nalu_type == 7;
+      }
       if (is_video)
         info->duration = (double) (pkt_pts-info->end_pts)*tb.num/tb.den;
       int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * info->number;
@@ -365,22 +367,18 @@ int HLSSegmenter::create_segment(uint32_t idx)
     tsmuxer->set_file(segment_tmp, u.mp4.parser->get_vtime_base());
     while (!interrupt_cb() &&
            !u.mp4.parser->mp4_read_packet(u.mp4.parser->m_mp4->stream, pkt)) {
-      bool is_video = !check_h264_startcode(pkt);
-      bool is_key = !is_video ||
-        ((pkt->data[4]&0x1f) == 5 ||
-         (pkt->data[4]&0x1f) == 7);
-      if (is_video)
+      if (pkt->is_video())
         info->duration = (double) (pkt->pts-info->end_pts)*tb.num/tb.den;
       int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * (idx + 1);
-      if (is_video &&
-          is_key &&
+      if (pkt->is_video() &&
+          pkt->is_key() &&
           av_compare_ts(pkt->pts - info->start_pts, tb, end_pts, AV_TIME_BASE_Q) >= 0 &&
           got_frame) {
         SAFE_FREE(pkt->data);
         break;
       }
       got_frame = true;
-      tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, is_video);
+      tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, pkt->is_video());
       SAFE_FREE(pkt->data);
     }
   } else if (m_mf == FLV) {
@@ -452,8 +450,14 @@ int HLSSegmenter::create_segment(uint32_t idx)
 
       BEGIN
       bool is_key = !is_video ||
-      ((pkt_data[4]&0x1f) == 5 ||
-       (pkt_data[4]&0x1f) == 7);
+                    ((pkt_data[4]&0x1f) == 5 ||
+                     (pkt_data[4]&0x1f) == 7);
+      if (!is_key) {
+        int nalu_type = pkt_data[4]&0x1f;
+        if (nalu_type == 9)
+          nalu_type = pkt_data[10]&0x1f;
+        is_key = nalu_type == 5 || nalu_type == 7;
+      }
       if (is_video)
         info->duration = (double) (pkt_pts-info->end_pts)*tb.num/tb.den;
       int64_t end_pts = m_hls_time * (int64_t) AV_TIME_BASE * (idx + 1);

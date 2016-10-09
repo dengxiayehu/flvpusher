@@ -34,6 +34,19 @@ int Packet::is_video() const
   return 0;
 }
 
+int Packet::is_key() const
+{
+  if (is_video()) {
+    int nalu_type = data[4]&0x1f;
+    if (nalu_type == 9) {
+      // Skip NALU_TYPE_AUD and then check again
+      nalu_type = data[10]&0x1f;
+    }
+    return nalu_type == 5 || nalu_type == 7;
+  }
+  return 1;
+}
+
 int Packet::clone(Packet *pkt, bool reuse_buffer)
 {
   if (!pkt)

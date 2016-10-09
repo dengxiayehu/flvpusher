@@ -104,7 +104,7 @@ int WebServerImpl::start(int listen_port, int server_threads)
   }
   if (!is_path_absolute(STR(document_root))) {
     document_root = sprintf_("%s%c%s",
-        STR(dirname_(abs_program)), DIRSEP, STR(document_root));
+                             STR(dirname_(abs_program)), DIRSEP, STR(document_root));
   }
   if (!is_dir(document_root)) {
     system_("mkdir -p %s", STR(document_root));

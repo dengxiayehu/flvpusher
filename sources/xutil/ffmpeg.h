@@ -36,6 +36,7 @@ struct Packet {
   int duration;
 
   int is_video() const;
+  int is_key() const;
   int clone(Packet *pkt, bool reuse_buffer);
 };
 

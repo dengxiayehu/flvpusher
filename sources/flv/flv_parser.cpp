@@ -311,7 +311,7 @@ int FLVParser::parse_avc(const byte *&p, uint32_t len,
 }
 
 int FLVParser::handle_video(FLVVideoTagData &vdat,
-    const byte strm[], uint32_t len)
+                            const byte strm[], uint32_t len)
 {
   const byte *p = strm;
 
