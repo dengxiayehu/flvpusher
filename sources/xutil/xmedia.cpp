@@ -508,4 +508,32 @@ float FPSCalc::get_fps()
   return m_fps;
 }
 
+int is_h264_video(const uint8_t *data, int size)
+{
+  if (!data || size < 6)
+    return -1;
+
+  return STARTCODE4(data) || STARTCODE3(data);
+}
+
+int is_h264_key(const uint8_t *data, int size)
+{
+  if (is_h264_video(data, size)) {
+    int nalu_type = data[4]&0x1f;
+    if (nalu_type == 9) {
+      // Skip NALU_TYPE_AUD and then check again
+      nalu_type = data[10]&0x1f;
+    }
+    return nalu_type == 5 || nalu_type == 7;
+  }
+  return 0;
+}
+
+int is_aac_audio(const uint8_t *data, int size)
+{
+  if (!data || size < 7)
+    return -1;
+  return VALUI24(data) == 0xFFFFFF;
+}
+
 }

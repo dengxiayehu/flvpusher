@@ -25,28 +25,6 @@ static CodecParser parsers[] = {
   { CODEC_ID_H264, sizeof(H264Context),     h264_parse_init, h264_parse, h264_parse_close, },
 };
 
-int Packet::is_video() const
-{
-  if (STARTCODE4(data)) {
-    // Video frame's data begins with nalu startcode
-    return 1;
-  }
-  return 0;
-}
-
-int Packet::is_key() const
-{
-  if (is_video()) {
-    int nalu_type = data[4]&0x1f;
-    if (nalu_type == 9) {
-      // Skip NALU_TYPE_AUD and then check again
-      nalu_type = data[10]&0x1f;
-    }
-    return nalu_type == 5 || nalu_type == 7;
-  }
-  return 1;
-}
-
 int Packet::clone(Packet *pkt, bool reuse_buffer)
 {
   if (!pkt)

@@ -138,6 +138,10 @@ private:
   uint64_t m_tm_last;
 };
 
+int is_h264_video(const uint8_t *data, int size);
+int is_h264_key(const uint8_t *data, int size);
+int is_aac_audio(const uint8_t *data, int size);
+
 }
 
 #endif /* end of _XMEDIA_H_ */
