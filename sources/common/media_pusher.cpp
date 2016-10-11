@@ -46,7 +46,8 @@ int MediaPusher::mux2ts(const std::string &tspath)
 }
 
 int MediaPusher::on_frame(const int32_t ts,
-                          const byte *dat, const uint32_t dat_len, int is_video)
+                          const byte *dat, const uint32_t dat_len, int is_video,
+                          uint32_t composition_time)
 {
   if (is_video && m_dvf.is_opened()) {
     if (!m_dvf.write_buffer(dat, dat_len))

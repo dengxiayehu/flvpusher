@@ -188,7 +188,7 @@ int RtmpSource::loop()
           (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
 
         switch (tag->hdr.typ) {
-          case FLVParser::TAG_VIDEO:
+          case FLVParser::TAG_VIDEO: {
             ++m_info.vrx;
             m_vstrmer->process(*tag);
             if (m_vstrmer->get_strm_length() == 0) {
@@ -211,15 +211,17 @@ int RtmpSource::loop()
 #ifdef XDEBUG
             LOGD("VIDEO timestamp is: %d", timestamp);
 #endif
+            uint32_t composition_time = VALUI24(tag->dat.video.pkt.composition_time);
             on_frame(timestamp,
-                     m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1);
+                     m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1,
+                     composition_time);
             if (m_sink->send_video(timestamp,
-                                   m_vstrmer->get_strm(),
-                                   m_vstrmer->get_strm_length()) < 0) {
+                                   m_vstrmer->get_strm(), m_vstrmer->get_strm_length(),
+                                   composition_time) < 0) {
               LOGE("Send video data to rtmpserver failed");
               set_interrupt(true);
             }
-            break;
+          } break;
 
           case FLVParser::TAG_AUDIO:
             ++m_info.arx;
@@ -246,8 +248,7 @@ int RtmpSource::loop()
             on_frame(timestamp,
                      m_astrmer->get_strm(), m_astrmer->get_strm_length(), 0);
             if (m_sink->send_audio(timestamp,
-                                   m_astrmer->get_strm(),
-                                   m_astrmer->get_strm_length()) < 0) {
+                                   m_astrmer->get_strm(), m_astrmer->get_strm_length()) < 0) {
               LOGE("Send audio data to rtmpserver failed");
               set_interrupt(true);
             }

@@ -60,19 +60,22 @@ int FLVPusher::loop()
     }
 
     switch (tag->hdr.typ) {
-      case FLVParser::TAG_VIDEO:
+      case FLVParser::TAG_VIDEO: {
         m_vstrmer->process(*tag);
         if (m_vstrmer->get_strm_length() == 0)
           break;
+        uint32_t composition_time = VALUI24(tag->dat.video.pkt.composition_time);
         on_frame(timestamp,
-                 m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1);
+                 m_vstrmer->get_strm(), m_vstrmer->get_strm_length(), 1,
+                 composition_time);
         if (m_sink->send_video(timestamp,
-                               m_vstrmer->get_strm(), m_vstrmer->get_strm_length()) < 0) {
+                               m_vstrmer->get_strm(), m_vstrmer->get_strm_length(),
+                               composition_time) < 0) {
           LOGE("Send video data to %sserver failed",
                STR(m_sink->type_str()));
           set_interrupt(true);
         }
-        break;
+      } break;
 
       case FLVParser::TAG_AUDIO:
         m_astrmer->process(*tag);

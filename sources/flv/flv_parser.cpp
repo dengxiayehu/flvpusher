@@ -244,13 +244,14 @@ int FLVParser::parse_avc(const byte *&p, uint32_t len,
   const byte *savep = p;
 
   vdat.pkt.pkt_typ = *p++;
-  INITUI24(vdat.pkt.compostion_time, ENTOH24(p));
+  uint32_t composition_time = ENTOH24(p);
+  INITUI24(vdat.pkt.composition_time, composition_time);
   p += sizeof(uint24_t);
 
   if (vdat.pkt.pkt_typ != NALU &&
-      VALUI24(vdat.pkt.compostion_time) != 0) {
-    LOGE("AVCPktType %u should with 0 compostion_time, not %u",
-         vdat.pkt.pkt_typ, VALUI24(vdat.pkt.compostion_time));
+      composition_time != 0) {
+    LOGE("AVCPktType %u should with 0 composition_time, not %u",
+         vdat.pkt.pkt_typ, composition_time);
     return -1;
   }
 

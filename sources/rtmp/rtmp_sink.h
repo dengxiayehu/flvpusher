@@ -18,7 +18,8 @@ public:
   virtual int connect(const std::string &liveurl);
   virtual int disconnect();
 
-  virtual int send_video(int32_t timestamp, byte *dat, uint32_t length);
+  virtual int send_video(int32_t timestamp, byte *dat, uint32_t length,
+                         uint32_t composition_time);
   virtual int send_audio(int32_t timestamp, byte *dat, uint32_t length);
 
   bool send_rtmp_pkt(int pkttype, uint32_t ts,
@@ -68,7 +69,8 @@ private:
   static int make_avc_dcr_body(byte *buf,
                                const byte *sps, uint32_t sps_len,
                                const byte *pps, uint32_t pps_len);
-  static int make_video_body(byte *buf, uint32_t dat_len, bool key_frame);
+  static int make_video_body(byte *buf, uint32_t dat_len, bool key_frame,
+                             uint32_t composition_time);
 
   static byte pkttyp2channel(byte typ);
 

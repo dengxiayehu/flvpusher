@@ -129,7 +129,8 @@ int RtspSink::disconnect()
   return 0;
 }
 
-int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
+int RtspSink::send_video(int32_t timestamp, byte *dat, uint32_t length,
+                         uint32_t composition_time)
 {
   Frame *f = new Frame;
   f->make_frame(timestamp, dat, length, false);

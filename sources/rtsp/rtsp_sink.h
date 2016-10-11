@@ -26,7 +26,8 @@ public:
   virtual int connect(const std::string &liveurl);
   virtual int disconnect();
 
-  virtual int send_video(int32_t timestamp, byte *dat, uint32_t length);
+  virtual int send_video(int32_t timestamp, byte *dat, uint32_t length,
+                         uint32_t composition_time);
   virtual int send_audio(int32_t timestamp, byte *dat, uint32_t length);
 
 private:

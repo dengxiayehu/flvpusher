@@ -25,7 +25,8 @@ public:
   int mux2ts(const std::string &tspath);
 
   virtual int on_frame(const int32_t ts,
-                       const byte *dat, const uint32_t dat_len, int is_video);
+                       const byte *dat, const uint32_t dat_len, int is_video,
+                       uint32_t composition_time = 0);
 
 protected:
   void set_itime_base(AVRational tb) { m_itime_base = tb; }

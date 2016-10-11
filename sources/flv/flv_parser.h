@@ -85,7 +85,7 @@ public:
   // Video structures
   struct AVCVideoPacket {
     byte pkt_typ;
-    uint24_t compostion_time;
+    uint24_t composition_time;
     union {
       AVCDecorderConfigurationRecord avc_dcr;
       Nalu nalu;

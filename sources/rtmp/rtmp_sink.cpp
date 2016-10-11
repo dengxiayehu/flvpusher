@@ -9,7 +9,6 @@
 #include "rtmp_sink.h"
 #include "common/config.h"
 #include "common/raw_parser.h"
-#include "flv/flv_muxer.h"
 
 #define VIDEO_BODY_HEADER_LENGTH    16
 #define VIDEO_PAYLOAD_OFFSET        5
@@ -118,7 +117,8 @@ int RtmpSink::disconnect()
   return 0;
 }
 
-int RtmpSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
+int RtmpSink::send_video(int32_t timestamp, byte *dat, uint32_t length,
+                         uint32_t composition_time)
 {
   if (m_vparser->process(dat, length) < 0) {
     LOGE("Process video failed");
@@ -208,7 +208,8 @@ int RtmpSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
   m_vinfo.lts = timestamp;
 
   int body_len = make_video_body(buf, cur-buf,
-                                 m_vparser->is_key_frame());
+                                 m_vparser->is_key_frame(),
+                                 composition_time);
   if (!send_rtmp_pkt(RTMP_PACKET_TYPE_VIDEO,
                      timestamp+m_vinfo.tm_offset, buf, body_len)) {
     LOGE("Send video data to rtmpserver failed");
@@ -221,7 +222,8 @@ int RtmpSink::send_video(int32_t timestamp, byte *dat, uint32_t length)
   return 0;
 }
 
-int RtmpSink::make_video_body(byte *buf, uint32_t dat_len, bool key_frame)
+int RtmpSink::make_video_body(byte *buf, uint32_t dat_len, bool key_frame,
+                              uint32_t composition_time)
 {
   uint32_t idx = 0;
 
@@ -229,9 +231,7 @@ int RtmpSink::make_video_body(byte *buf, uint32_t dat_len, bool key_frame)
 
   buf[idx++] = 0x01;
 
-  buf[idx++] = 0x00;    
-  buf[idx++] = 0x00;
-  buf[idx++] = 0x00;
+  put_be24(buf + idx, composition_time);
   return dat_len;
 }
 
@@ -245,9 +245,8 @@ int RtmpSink::make_avc_dcr_body(byte *buf,
 
   buf[idx++] = 0x00;
 
-  buf[idx++] = 0x00;
-  buf[idx++] = 0x00;
-  buf[idx++] = 0x00;
+  put_be24(buf + idx, 0);
+  idx += 3;
 
   buf[idx++] = 0x01;
   buf[idx++] = sps[1];
