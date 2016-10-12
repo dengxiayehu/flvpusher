@@ -44,7 +44,7 @@ int RtspSource::prepare()
 
   string sdp;
   if (m_client->request_describe(sdp,
-        (TaskFunc *) RtspClient::continue_after_describe) < 0) {
+                                 (TaskFunc *) RtspClient::continue_after_describe) < 0) {
     LOGE("Failed to send DESCRIBE command");
     return -1;
   }
@@ -63,7 +63,7 @@ int RtspSource::prepare()
 }
 
 int RtspSource::on_frame(const int32_t ts,
-    const byte *dat, const uint32_t dat_len, int is_video)
+                         const byte *dat, const uint32_t dat_len, int is_video)
 {
   MediaPusher::on_frame(ts, dat, dat_len, is_video);
 

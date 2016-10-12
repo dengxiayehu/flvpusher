@@ -69,7 +69,8 @@ int MediaPusher::on_frame(const int32_t ts,
       }
     }
 
-    if (m_tsmuxer.write_frame(ts, dat, dat_len, is_video) < 0)
+    if (m_tsmuxer.write_frame(ts, dat, dat_len, is_video,
+                              composition_time) < 0)
       return -1;
   }
 

@@ -191,7 +191,8 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         }
       }
       if (create_ts)
-        tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, is_video);
+        tsmuxer->write_frame(pkt->dts, pkt->data, pkt->size, is_video,
+                             pkt->pts - pkt->dts);
       memcpy(rs, u.mp4.parser->m_status, sizeof(rs));
       SAFE_FREE(pkt->data);
     }
@@ -218,8 +219,9 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         break;
       }
 
-      int32_t pkt_pts =
+      int32_t pkt_dts =
         (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
+      int32_t pkt_pts = pkt_dts;
       byte *pkt_data;
       uint32_t pkt_size;
       int is_video = 1;
@@ -230,6 +232,7 @@ int HLSSegmenter::create_m3u8(bool create_ts)
           if (vstrmer->get_strm_length() == 0) {
             goto done;
           }
+          pkt_pts += VALUI24(tag->dat.video.pkt.composition_time);
           pkt_data = vstrmer->get_strm();
           pkt_size = vstrmer->get_strm_length();
           break;
@@ -296,7 +299,8 @@ int HLSSegmenter::create_m3u8(bool create_ts)
         }
       }
       if (create_ts)
-        tsmuxer->write_frame(pkt_pts, pkt_data, pkt_size, is_video);
+        tsmuxer->write_frame(pkt_dts, pkt_data, pkt_size, is_video,
+                             pkt_pts - pkt_dts);
       memcpy(rs, u.flv.parser->m_status, sizeof(rs));
       END
 done:
@@ -377,7 +381,8 @@ int HLSSegmenter::create_segment(uint32_t idx)
         break;
       }
       got_frame = true;
-      tsmuxer->write_frame(pkt->pts, pkt->data, pkt->size, is_video);
+      tsmuxer->write_frame(pkt->dts, pkt->data, pkt->size, is_video,
+                           pkt->pts - pkt->dts);
       SAFE_FREE(pkt->data);
     }
   } else if (m_mf == FLV) {
@@ -415,8 +420,9 @@ int HLSSegmenter::create_segment(uint32_t idx)
         break;
       }
 
-      int32_t pkt_pts =
+      int32_t pkt_dts =
         (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
+      int32_t pkt_pts = pkt_dts;
       byte *pkt_data;
       uint32_t pkt_size;
       int is_video = 1;
@@ -427,6 +433,7 @@ int HLSSegmenter::create_segment(uint32_t idx)
           if (vstrmer->get_strm_length() == 0) {
             goto done;
           }
+          pkt_pts += VALUI24(tag->dat.video.pkt.composition_time);
           pkt_data = vstrmer->get_strm();
           pkt_size = vstrmer->get_strm_length();
           break;
@@ -463,7 +470,8 @@ int HLSSegmenter::create_segment(uint32_t idx)
       END
 
       got_frame = true;
-      tsmuxer->write_frame(pkt_pts, pkt_data, pkt_size, is_video);
+      tsmuxer->write_frame(pkt_dts, pkt_data, pkt_size, is_video,
+                           pkt_pts - pkt_dts);
 done:
       u.flv.parser->free_tag(tag);
     }

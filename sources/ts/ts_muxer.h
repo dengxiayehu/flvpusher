@@ -19,7 +19,8 @@ public:
   int set_file(const std::string &tspath, AVRational itime_base);
 
   int write_frame(const int32_t ts,
-                  const uint8_t *dat, const uint32_t dat_len, int is_video);
+                  const uint8_t *dat, const uint32_t dat_len, int is_video,
+                  const uint32_t composition_time = 0);
 
   bool is_opened() const;
 

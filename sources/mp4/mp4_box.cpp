@@ -1418,11 +1418,11 @@ int CompositionOffsetBox::init(File *f)
 
   uint32_t *p = (uint32_t *) tmp;
   sample_count = new uint32_t[entry_count];
-  sample_offset = new int32_t[entry_count];
+  sample_offset = new uint32_t[entry_count];
   for (uint32_t i = 0; i < entry_count; ++i) {
     sample_count[i] = ENTOHL(*p);
     ++p;
-    sample_offset[i] = (int32_t) ENTOHL(*p);
+    sample_offset[i] = ENTOHL(*p);
     ++p;
   }
 
@@ -1431,7 +1431,7 @@ int CompositionOffsetBox::init(File *f)
 #if XDEBUG_FULL
   for (uint32_t i = 0; i < entry_count; ++i) {
     printf("sample_count: %u\n", sample_count[i]);
-    printf("sample_offset: %d\n", sample_offset[i]);
+    printf("sample_offset: %u\n", sample_offset[i]);
   }
 #endif
 #endif

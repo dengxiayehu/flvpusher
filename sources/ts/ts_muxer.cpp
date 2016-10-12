@@ -456,7 +456,8 @@ bail:
 }
 
 int TSMuxer::write_frame(const int32_t ts,
-                         const uint8_t *dat, const uint32_t dat_len, int is_video)
+                         const uint8_t *dat, const uint32_t dat_len, int is_video,
+                         const uint32_t composition_time)
 {
   Packet pkt1, *pkt=&pkt1;
   pkt->data = (uint8_t *) malloc(dat_len * sizeof(uint8_t));
@@ -467,7 +468,8 @@ int TSMuxer::write_frame(const int32_t ts,
   }
   memcpy(pkt->data, dat, dat_len);
   pkt->size = dat_len;
-  pkt->pts = pkt->dts = ts;
+  pkt->dts = ts;
+  pkt->pts = pkt->dts + composition_time;
   pkt->pos = 0;
   pkt->stream_index = is_video ? VIDEO : AUDIO;
   pkt->duration = 0;

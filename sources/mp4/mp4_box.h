@@ -309,7 +309,7 @@ public:
 
   uint32_t entry_count;
   uint32_t *sample_count;
-  int32_t *sample_offset; // Always signed int(32) for sample_offset
+  uint32_t *sample_offset; // Always unsigned int(32) for sample_offset
 };
 
 class SyncSampleBox : public FullBox {

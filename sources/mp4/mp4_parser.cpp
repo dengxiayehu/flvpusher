@@ -587,7 +587,7 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
   frame.m_dat = NULL;
 
 #ifdef XDEBUG
-  LOGD("%s pkt->pts=%lld, pkt->dts=%lld (composition_time=%d), pkt->size=%d, pkt->duration: %d, current_sample#=%d, total samples#=%d",
+  LOGD("%s pkt->pts=%lld, pkt->dts=%lld (composition_time=%u), pkt->size=%d, pkt->duration: %d, current_sample#=%d, total samples#=%d",
        pkt->stream_index == AUDIO ? "AUDIO" : "VIDEO",
        pkt->pts, pkt->dts, frame.m_composition_time, pkt->size, pkt->duration,
        rstatus->sample_idx,

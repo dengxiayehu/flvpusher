@@ -77,7 +77,7 @@ private:
 
   struct SampleEntry {
     int64_t decode_ts;
-    int32_t composition_time;
+    uint32_t composition_time;
     uint32_t sample_idx;
     off_t sample_offset;
     uint32_t sample_sz;

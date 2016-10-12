@@ -14,7 +14,7 @@ Frame::Frame() :
 }
 
 int Frame::make_frame(int32_t ts, byte *dat, uint32_t dat_len,
-                      bool reuse_dat, int composition_time)
+                      bool reuse_dat, uint32_t composition_time)
 {
   if (!reuse_dat) {
     if (m_capacity >= dat_len) {

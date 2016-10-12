@@ -539,8 +539,13 @@ void compute_pkt_fields(FormatContext *s, Stream *st,
       pkt->dts != -1 ||
       pkt->duration) {
     if (st->start_time == -1 ||
-        st->start_time > pkt->pts)
+        (pkt->pts >= 0 && st->start_time > pkt->pts)) {
       st->start_time = pkt->pts;
+    }
+    if (pkt->pts == -1)
+      pkt->pts = st->cur_dts;
+    if (pkt->dts == -1)
+      pkt->dts = pkt->pts;
     if (st->first_dts == -1)
       st->first_dts = pkt->dts;
     if (pkt->dts != -1)
