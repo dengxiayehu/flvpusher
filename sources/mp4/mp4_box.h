@@ -38,6 +38,7 @@ class FullBox : public Box {
 public:
   FullBox(uint32_t _sz, uint32_t _typ,
           uint8_t _ver, const uint24_t &_flgs);
+  virtual ~FullBox() { }
   virtual int init(File *f);
   virtual void print() const;
 
@@ -291,7 +292,7 @@ class TimeToSampleBox : public FullBox {
 public:
   TimeToSampleBox(uint32_t _sz, uint32_t _typ,
                   uint8_t _ver, const uint24_t &_flgs);
-  ~TimeToSampleBox();
+  virtual ~TimeToSampleBox();
   int init(File *f);
 
   uint32_t entry_count;
@@ -299,11 +300,23 @@ public:
   uint32_t *sample_delta;
 };
 
+class CompositionOffsetBox : public FullBox {
+public:
+  CompositionOffsetBox(uint32_t _sz, uint32_t _typ,
+                       uint8_t _ver, const uint24_t &_flgs);
+  virtual ~CompositionOffsetBox();
+  int init(File *f);
+
+  uint32_t entry_count;
+  uint32_t *sample_count;
+  int32_t *sample_offset; // Always signed int(32) for sample_offset
+};
+
 class SyncSampleBox : public FullBox {
 public:
   SyncSampleBox(uint32_t _sz, uint32_t _typ,
                 uint8_t _ver, const uint24_t &_flgs);
-  ~SyncSampleBox();
+  virtual ~SyncSampleBox();
   int init(File *f);
 
   uint32_t entry_count;
@@ -314,7 +327,7 @@ class SampleToChunkBox : public FullBox {
 public:
   SampleToChunkBox(uint32_t _sz, uint32_t _typ,
                    uint8_t _ver, const uint24_t &_flgs);
-  ~SampleToChunkBox();
+  virtual ~SampleToChunkBox();
   int init(File *f);
 
   uint32_t entry_count;
@@ -327,7 +340,7 @@ class SampleSizeBox : public FullBox {
 public:
   SampleSizeBox(uint32_t _sz, uint32_t _typ,
                 uint8_t _ver, const uint24_t &_flgs);
-  ~SampleSizeBox();
+  virtual ~SampleSizeBox();
   int init(File *f);
 
   uint32_t sample_size;
@@ -339,7 +352,7 @@ class ChunkOffsetBox : public FullBox {
 public:
   ChunkOffsetBox(uint32_t _sz, uint32_t _typ,
                  uint8_t _ver, const uint24_t &_flgs);
-  ~ChunkOffsetBox();
+  virtual ~ChunkOffsetBox();
   int init(File *f);
 
   uint32_t entry_count;
@@ -350,7 +363,7 @@ class ChunkLargeOffsetBox : public FullBox {
 public:
   ChunkLargeOffsetBox(uint32_t _sz, uint32_t _typ,
                       uint8_t _ver, const uint24_t &_flgs);
-  ~ChunkLargeOffsetBox();
+  virtual ~ChunkLargeOffsetBox();
   int init(File *f);
 
   uint32_t entry_count;
@@ -396,7 +409,7 @@ public:
   EditListBox(uint32_t _sz, uint32_t _typ,
               uint8_t _ver, const uint24_t &_flgs);
   int init(File *f);
-  ~EditListBox();
+  virtual ~EditListBox();
 
   uint32_t entry_count;
   struct ELSTEntry {

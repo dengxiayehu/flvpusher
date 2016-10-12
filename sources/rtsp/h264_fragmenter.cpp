@@ -57,14 +57,14 @@ void H264Fragmenter::get_next_frame(unsigned char *to, unsigned max_size,
     memcpy(&m_input_buffer[1], m_vparser.get_nalu_data(m_nalu_index_in_parser), frame_size);
 
     struct timeval presentation_time;
-    presentation_time.tv_sec = m_frame->m_ts/1000;
-    presentation_time.tv_usec = (m_frame->m_ts%1000)*1000;
+    presentation_time.tv_sec = m_frame->m_dts/1000;
+    presentation_time.tv_usec = (m_frame->m_dts%1000)*1000;
 
     if (++m_nalu_index_in_parser >= m_vparser.get_nalu_num()) {
       // this frame is done
       m_nalu_index_in_parser = 0;
-      m_duration_in_microseconds = (m_frame->m_ts - m_last_timestamp)*1000;
-      m_last_timestamp = m_frame->m_ts;
+      m_duration_in_microseconds = (m_frame->m_dts - m_last_timestamp)*1000;
+      m_last_timestamp = m_frame->m_dts;
     }
 
     after_getting_frame1(frame_size, num_truncated_bytes,

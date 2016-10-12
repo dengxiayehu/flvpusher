@@ -21,12 +21,13 @@ class Frame {
 public:
   Frame();
   int make_frame(int32_t ts, byte *dat, uint32_t dat_len,
-                 bool reuse_dat=false);
+                 bool reuse_dat, int composition_time = 0);
   void clear();
   ~Frame();
 
 public:
-  int32_t m_ts;
+  int32_t m_dts;
+  int32_t m_composition_time;
   byte *m_dat;
   uint32_t m_dat_len;
   uint32_t m_capacity;

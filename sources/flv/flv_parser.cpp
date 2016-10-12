@@ -171,6 +171,10 @@ int FLVParser::read_tag(FLVTag *&tag, uint8_t *buf, uint32_t buf_size)
   LOGD("Tag timestamp: %u", VALUI24(tag->hdr.timestamp));
   LOGD("Tag timestamp-extended: %u", tag->hdr.timestamp_ext);
   LOGD("Tag stream-id: %u", VALUI24(tag->hdr.stream_id));
+  if (tag->hdr.typ == TAG_VIDEO) {
+    LOGD("Tag composition-time: %u",
+         VALUI24(tag->dat.video.pkt.composition_time));
+  }
 #endif
 
   // Read the "Previous Tag Size"

@@ -9,12 +9,12 @@ using namespace xutil;
 namespace xmedia {
 
 Frame::Frame() :
-  m_ts(-1), m_dat(NULL), m_dat_len(0), m_capacity(0)
+  m_dts(-1), m_composition_time(0), m_dat(NULL), m_dat_len(0), m_capacity(0)
 {
 }
 
 int Frame::make_frame(int32_t ts, byte *dat, uint32_t dat_len,
-                      bool reuse_dat)
+                      bool reuse_dat, int composition_time)
 {
   if (!reuse_dat) {
     if (m_capacity >= dat_len) {
@@ -42,13 +42,15 @@ copy:
     m_capacity = m_dat_len = dat_len;
   }
 
-  m_ts = ts;
+  m_dts = ts;
+  m_composition_time = composition_time;
   return 0;
 }
 
 void Frame::clear()
 {
-  m_ts = -1;
+  m_dts = -1;
+  m_composition_time = 0;
   m_capacity = m_dat_len = 0;
   SAFE_FREE(m_dat);
 }

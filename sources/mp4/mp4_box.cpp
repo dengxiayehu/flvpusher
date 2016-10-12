@@ -153,6 +153,9 @@ int Box::parse_box(Box *&pb, File *f, off_t curend)
     } else if (typ == MKTAG4('s', 't', 't', 's')) {
       GET_FULLBOX_VER_FLGS
       pcb = new TimeToSampleBox(sz, typ, ver, flgs);
+    } else if (typ == MKTAG4('c', 't', 't', 's')) {
+      GET_FULLBOX_VER_FLGS
+      pcb = new CompositionOffsetBox(sz, typ, ver, flgs);
     } else if (typ == MKTAG4('s', 't', 's', 's')) {
       GET_FULLBOX_VER_FLGS
       pcb = new SyncSampleBox(sz, typ, ver, flgs);
@@ -1356,6 +1359,79 @@ int TimeToSampleBox::init(File *f)
   for (uint32_t i = 0; i < entry_count; ++i) {
     printf("sample_count: %u\n", sample_count[i]);
     printf("sample_delta: %u\n", sample_delta[i]);
+  }
+#endif
+#endif
+
+  SAFE_DELETE_ARRAY(tmp);
+  return 0;
+}
+
+/////////////////////////////////////////////////////////////
+
+
+CompositionOffsetBox::CompositionOffsetBox(uint32_t _sz, uint32_t _typ,
+                                           uint8_t _ver, const uint24_t &_flgs) :
+  FullBox(_sz, _typ, _ver, _flgs),
+  entry_count(0), sample_count(NULL), sample_offset(NULL)
+{
+}
+
+CompositionOffsetBox::~CompositionOffsetBox()
+{
+  SAFE_DELETE_ARRAY(sample_count);
+  SAFE_DELETE_ARRAY(sample_offset);
+}
+
+int CompositionOffsetBox::init(File *f)
+{
+  FullBox::print();
+
+  /* REFERENCE
+   * unsigned int(32) entry_count;
+   * int i;
+   * if (version==0) {
+   *   for (i=0; i < entry_count; i++) {
+   *     unsigned int(32)  sample_count;
+   *     unsigned int(32)  sample_offset;
+   *   }
+   * }
+   * else if (version == 1) {
+   *   for (i=0; i < entry_count; i++) {
+   *     unsigned int(32)  sample_count;
+   *     signed   int(32)  sample_offset;
+   *   }
+   * }
+   */
+  if (!f->readui32(&entry_count, true)) {
+    LOGE("Read \"ctts\" entry_count failed");
+    return -1;
+  }
+
+  uint32_t tmp_len = sz - 12 - 4/*entry_count's size*/;
+  uint8_t *tmp = new uint8_t[tmp_len];
+  if (!f->read_buffer(tmp, tmp_len)) {
+    LOGE("Read \"ctts\" content failed");
+    SAFE_DELETE_ARRAY(tmp);
+    return -1;
+  }
+
+  uint32_t *p = (uint32_t *) tmp;
+  sample_count = new uint32_t[entry_count];
+  sample_offset = new int32_t[entry_count];
+  for (uint32_t i = 0; i < entry_count; ++i) {
+    sample_count[i] = ENTOHL(*p);
+    ++p;
+    sample_offset[i] = (int32_t) ENTOHL(*p);
+    ++p;
+  }
+
+#ifdef XDEBUG
+  printf("entry_count: %u\n", entry_count);
+#if XDEBUG_FULL
+  for (uint32_t i = 0; i < entry_count; ++i) {
+    printf("sample_count: %u\n", sample_count[i]);
+    printf("sample_offset: %d\n", sample_offset[i]);
   }
 #endif
 #endif

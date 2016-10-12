@@ -18,9 +18,6 @@ public:
 
   int set_file(const std::string &mp4_file);
 
-  int read_vframe(Frame *f);
-  int read_aframe(Frame *f);
-
   int get_resolution(uint32_t &width, uint32_t &height) const;
 
   AVRational get_vtime_base() const;
@@ -37,6 +34,7 @@ public:
       esdsBox *esds;
     };
     TimeToSampleBox *stts;
+    CompositionOffsetBox *ctts;
     SampleToChunkBox *stsc;
     SampleSizeBox *stsz;
     bool large_offset;
@@ -58,11 +56,17 @@ public:
 
 private:
   struct ReadStatus {
-    uint32_t cnt_offset;    // Sample offset in "stts"
-    uint32_t delta_offset;  // Delta offset in "stts"'s sample_delta
-    AVFrac pts;             // Current frame's pts
-    uint32_t shift_time;    // Shift added to audio track
-    uint32_t sample_idx;    // Sample idx to read
+    struct {
+      uint32_t cnt;           // Sample count in "stts"
+      uint32_t offset;        // Offset in "stts"'s sample_delta
+    } stts;
+    struct {
+      uint32_t cnt;           // Sample count in "ctts"
+      uint32_t offset;        // Offset in "ctts"'s sample_offset
+    } ctts;
+    AVFrac dts;               // Current frame's dts
+    uint32_t shift_time;      // Shift added to audio track
+    uint32_t sample_idx;      // Sample idx to read
     struct LocateChunkCache {
       uint32_t cached_sample_idx;
       uint32_t cached_entry_idx;
@@ -72,10 +76,13 @@ private:
   };
 
   struct SampleEntry {
-    int64_t timestamp;
+    int64_t decode_ts;
+    int32_t composition_time;
     uint32_t sample_idx;
     off_t sample_offset;
     uint32_t sample_sz;
+
+    SampleEntry() { memset(this, 0, sizeof(*this)); }
   };
 
 private:
@@ -124,28 +131,6 @@ private:
 private:
   MP4Context *m_mp4;
 };
-
-inline int MP4Parser::read_vframe(Frame *f)
-{
-  Track *trak = &m_track[VIDEO];
-  ReadStatus *rstatus = &m_status[VIDEO];
-  SampleEntry sentry;
-  if (locate_sample(trak, rstatus, &sentry) < 0 ||
-      read_frame(m_file, trak, &sentry, f) < 0)
-    return -1;
-  return 0;
-}
-
-inline int MP4Parser::read_aframe(Frame *f)
-{
-  Track *trak = &m_track[AUDIO];
-  ReadStatus *rstatus = &m_status[AUDIO];
-  SampleEntry sentry;
-  if (locate_sample(trak, rstatus, &sentry) < 0 ||
-      read_frame(m_file, trak, &sentry, f) < 0)
-    return -1;
-  return 0;
-}
 
 }
 

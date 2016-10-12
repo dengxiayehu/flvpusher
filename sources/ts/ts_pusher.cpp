@@ -85,22 +85,22 @@ int TSPusher::parsed_frame_cb(void *opaque, Frame *f, int is_video)
   TSPusher *obj = (TSPusher *) opaque;
   int ret = 0;
 
-  f->m_ts += obj->m_tm_offset;
+  f->m_dts += obj->m_tm_offset;
 
-  if (obj->frame_wait_done(&f->m_ts) < 0)
+  if (obj->frame_wait_done(&f->m_dts) < 0)
     return -1;
 
-  obj->on_frame(f->m_ts, f->m_dat, f->m_dat_len, is_video);
+  obj->on_frame(f->m_dts, f->m_dat, f->m_dat_len, is_video);
 
   if (is_video) {
-    if (obj->m_sink->send_video(f->m_ts,
+    if (obj->m_sink->send_video(f->m_dts,
                                 f->m_dat, f->m_dat_len) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;
     }
   } else {
-    if (obj->m_sink->send_audio(f->m_ts,
+    if (obj->m_sink->send_audio(f->m_dts,
                                 f->m_dat, f->m_dat_len) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));

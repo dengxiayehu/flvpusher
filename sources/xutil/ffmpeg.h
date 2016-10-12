@@ -35,6 +35,7 @@ struct Packet {
   int stream_index;
   int duration;
 
+  Packet() { memset(this, 0, sizeof(*this)); }
   int clone(Packet *pkt, bool reuse_buffer);
 };
 
@@ -150,6 +151,7 @@ struct Stream {
   AVRational time_base;
   int need_parsing;
   CodecParserContext *parser;
+  int64_t first_dts;
   int64_t cur_dts;
   PacketList *last_in_packet_buffer;
   int nb_index_entries;

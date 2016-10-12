@@ -244,6 +244,7 @@ Stream *format_new_stream(FormatContext *s)
     return NULL;
 
   st->start_time = -1;
+  st->first_dts = -1;
   st->cur_dts = -1;
   st->index = s->nb_streams;
   s->streams[s->nb_streams++] = st;
@@ -403,7 +404,7 @@ void parser_close(CodecParserContext *s)
 
 int parse_packet(FormatContext *s, Packet *pkt, int stream_index)
 {
-  Packet out_pkt = { 0 }, flush_pkt = { 0 };
+  Packet out_pkt, flush_pkt;
   Stream *st = s->streams[stream_index];
   uint8_t *data = pkt ? pkt->data : NULL;
   int size = pkt ? pkt->size : 0;
@@ -537,13 +538,13 @@ void compute_pkt_fields(FormatContext *s, Stream *st,
   if (pkt->pts != -1 ||
       pkt->dts != -1 ||
       pkt->duration) {
-    if (st->start_time == -1)
+    if (st->start_time == -1 ||
+        st->start_time > pkt->pts)
       st->start_time = pkt->pts;
-    if (pkt->pts == -1)
-      pkt->pts = st->cur_dts;
-    pkt->dts = pkt->pts;
-    if (pkt->pts != -1)
-      st->cur_dts = av_add_stable(st->time_base, pkt->pts, duration, 1);
+    if (st->first_dts == -1)
+      st->first_dts = pkt->dts;
+    if (pkt->dts != -1)
+      st->cur_dts = av_add_stable(st->time_base, pkt->dts, duration, 1);
   }
 }
 
@@ -1109,7 +1110,7 @@ void estimate_timings_from_pts(FormatContext *ic, off_t old_offset)
   ic->file->seek_to(old_offset);
   for (i = 0; i < ic->nb_streams; ++i) {
     st = ic->streams[i];
-    st->cur_dts = st->start_time;
+    st->cur_dts = st->first_dts;
   }
 }
 
@@ -1380,7 +1381,7 @@ int format_find_stream_info(FormatContext *ic)
     }
 
     pkt = add_to_pktbuf(&ic->packet_buffer, &pkt1,
-        &ic->packet_buffer_end);
+                        &ic->packet_buffer_end);
     if (!pkt) {
       ret = -1;
       goto out;
@@ -1527,7 +1528,7 @@ int interleaved_write_frame(FormatContext *ic, Packet *pkt)
       int is_video = mt == MEDIA_TYPE_VIDEO ? 1 : 0;
 
       Frame frame;
-      if (frame.make_frame(opkt.pts, opkt.data, opkt.size, true) < 0 ||
+      if (frame.make_frame(opkt.dts, opkt.data, opkt.size, true, opkt.pts - opkt.dts) < 0 ||
           (ret = ic->cb(ic->opaque, &frame, is_video)) < 0) {
         *ic->watch_variable = true;
         ret = -1;

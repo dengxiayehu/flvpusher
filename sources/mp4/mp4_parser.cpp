@@ -74,7 +74,7 @@ int MP4Parser::init()
       m_status[AUDIO].shift_time = media_time*1000/trak->timescale;
     }
   }
-  frac_init(&rstatus->pts, 0, 0, trak->timescale);
+  frac_init(&rstatus->dts, 0, 0, trak->timescale);
 
   trak = &m_track[AUDIO];
   rstatus = &m_status[AUDIO];
@@ -105,10 +105,10 @@ int MP4Parser::init()
 #endif
     }
   }
-  frac_init(&rstatus->pts, 0, 0, trak->timescale);
+  frac_init(&rstatus->dts, 0, 0, trak->timescale);
   // Only audio has shift_time
   if (rstatus->shift_time > 0)
-    rstatus->pts.val += rstatus->shift_time;
+    rstatus->dts.val += rstatus->shift_time;
   return 0;
 }
 
@@ -165,6 +165,8 @@ int MP4Parser::init_tracks_from_box(Box *box, Track *&trak)
       trak->esds = (esdsBox *) p;
     } else if (p->typ == MKTAG4('s', 't', 't', 's')) {
       trak->stts = (TimeToSampleBox *) p;
+    } else if (p->typ == MKTAG4('c', 't', 't', 's')) {
+      trak->ctts = (CompositionOffsetBox *) p;
     } else if (p->typ == MKTAG4('s', 't', 's', 'c')) {
       trak->stsc = (SampleToChunkBox *) p;
     } else if (p->typ == MKTAG4('s', 't', 's', 'z')) {
@@ -251,11 +253,18 @@ int MP4Parser::locate_sample(Track *trak, ReadStatus *rstatus,
     return -1;
   }
 
-  if (rstatus->delta_offset ==
-      trak->stts->sample_count[rstatus->cnt_offset]) {
+  if (rstatus->stts.offset ==
+      trak->stts->sample_count[rstatus->stts.cnt]) {
     // Handle next sample_count in "stts"
-    ++rstatus->cnt_offset;
-    rstatus->delta_offset = 0;
+    ++rstatus->stts.cnt;
+    rstatus->stts.offset = 0;
+  }
+
+  if (trak->ctts && rstatus->ctts.offset ==
+                    trak->ctts->sample_count[rstatus->ctts.cnt]) {
+    // Handle next sample_count in "ctts"
+    ++rstatus->ctts.cnt;
+    rstatus->ctts.offset = 0;
   }
 
   // Get chunk containing this sample and chunk's first sample idx
@@ -291,17 +300,25 @@ int MP4Parser::locate_sample(Track *trak, ReadStatus *rstatus,
 #endif
 
   if (sentry) {
-    sentry->timestamp = rstatus->pts.val;
+    sentry->decode_ts = rstatus->dts.val;
     sentry->sample_idx = rstatus->sample_idx;
     sentry->sample_offset = rstatus->sample_offset;
     sentry->sample_sz = sample_sz;
   }
 
-  // Update the next frame's timestamp
-  frac_add(&rstatus->pts,
-           trak->stts->sample_delta[rstatus->cnt_offset]*1000);
+  // Update the next frame's decode timestamp
+  frac_add(&rstatus->dts,
+           trak->stts->sample_delta[rstatus->stts.cnt]*1000);
+  if (trak->ctts && sentry) {
+    sentry->composition_time =
+      trak->ctts->sample_offset[rstatus->ctts.cnt]*1000/trak->timescale;
+  }
   // Handle next sample in this sample_count in "stts"
-  ++rstatus->delta_offset;
+  ++rstatus->stts.offset;
+  if (trak->ctts) {
+    // Handle next sample in this sample_count in "ctts"
+    ++rstatus->ctts.offset;
+  }
   // Update the sample idx to read next time
   ++rstatus->sample_idx;
   return 0;
@@ -313,7 +330,7 @@ int MP4Parser::read_frame(File &file, Track *trak,
   if (!sentry || !f)
     return -1;
 
-  int64_t timestamp = sentry->timestamp;
+  int64_t decode_ts = sentry->decode_ts;
   uint32_t sample_idx = sentry->sample_idx;
   off_t sample_offset = sentry->sample_offset;
   uint32_t sample_sz = sentry->sample_sz;
@@ -400,7 +417,7 @@ int MP4Parser::read_frame(File &file, Track *trak,
     sample_sz += 7;
   }
 
-  return f->make_frame(timestamp, dat, sample_sz, true);
+  return f->make_frame(decode_ts, dat, sample_sz, true, sentry->composition_time);
 }
 
 /////////////////////////////////////////////////////////////
@@ -502,7 +519,7 @@ int MP4Parser::init_ffmpeg_context()
     st->need_parsing = 1;
     st->nb_index_entries = trak->stsz->sample_count;
     st->priv_data = this;
-    // The read frame's timestamp is already in millisecond, 32bits
+    // The read frame's decode timestamp is already in millisecond, 32bits
     priv_set_pts_info(st, 32, 1, 1000);
   }
 
@@ -529,7 +546,7 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
   MP4Parser *obj = NULL;
   Track *trak = NULL;
   ReadStatus *rstatus = NULL;
-  // Read frame with monotonous timestamp 
+  // Read frame with monotonous decode timestamp 
   for (unsigned i = 0; i < s->nb_streams; ++i) {
     Stream *st = s->streams[i];
     obj = (MP4Parser *) st->priv_data;;
@@ -538,7 +555,7 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
     // Already read to the end of this stream, ignore it and try another one
     if (rstatus->sample_idx == trak->stsz->sample_count)
       continue;
-    int64_t dts = av_rescale(rstatus->pts.val, AV_TIME_BASE, st->time_base.den);
+    int64_t dts = av_rescale(rstatus->dts.val, AV_TIME_BASE, st->time_base.den);
     if (selected_stream == -1 ||
         ((abs(best_dts - dts) <= 4 && rstatus->sample_offset < obj->m_status[selected_stream].sample_offset) ||
          (abs(best_dts - dts) > 4 && dts < best_dts))) {
@@ -560,8 +577,9 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
     return -1;
 
   pkt->stream_index = selected_stream;
-  pkt->pts = pkt->dts = sentry.timestamp;
-  pkt->duration = rstatus->pts.val - pkt->pts;
+  pkt->pts = frame.m_dts + frame.m_composition_time;
+  pkt->dts = frame.m_dts;
+  pkt->duration = rstatus->dts.val - pkt->dts;
   pkt->pos = sentry.sample_offset;
   // Hack style, optimize the memory algorithm
   pkt->data = frame.m_dat;
@@ -569,9 +587,9 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
   frame.m_dat = NULL;
 
 #ifdef XDEBUG
-  LOGD("%s pkt->pts=%lld, pkt->size=%d, pkt->duration: %d, current_sample#=%d, total samples#=%d",
+  LOGD("%s pkt->pts=%lld, pkt->dts=%lld (composition_time=%d), pkt->size=%d, pkt->duration: %d, current_sample#=%d, total samples#=%d",
        pkt->stream_index == AUDIO ? "AUDIO" : "VIDEO",
-       pkt->pts, pkt->size, pkt->duration,
+       pkt->pts, pkt->dts, frame.m_composition_time, pkt->size, pkt->duration,
        rstatus->sample_idx,
        trak->stsz->sample_count);
 #endif
@@ -580,8 +598,8 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
 
 void MP4Parser::print_ReadStatus(const ReadStatus &rs)
 {
-  LOGD("%u %u {%d, %d} %u %u {%u, %u, %u} %lld",
-       rs.cnt_offset, rs.delta_offset, rs.pts.num, rs.pts.den, rs.shift_time, rs.sample_idx, rs.lcc.cached_sample_idx, rs.lcc.cached_entry_idx, rs.lcc.cached_total_samples, rs.sample_offset);
+  LOGD("%u %u %u %u {%d, %d} %u %u {%u, %u, %u} %lld",
+       rs.stts.cnt, rs.stts.offset, rs.ctts.cnt, rs.ctts.offset, rs.dts.num, rs.dts.den, rs.shift_time, rs.sample_idx, rs.lcc.cached_sample_idx, rs.lcc.cached_entry_idx, rs.lcc.cached_total_samples, rs.sample_offset);
 }
 
 InputFormat MP4Parser::mp4_demuxer = { "mp4|3gp|3gpp", sizeof(MP4Context), mp4_read_packet };
