@@ -577,19 +577,19 @@ int MP4Parser::mp4_read_packet(FormatContext *s, Packet *pkt)
     return -1;
 
   pkt->stream_index = selected_stream;
-  pkt->pts = frame.m_dts + frame.m_composition_time;
-  pkt->dts = frame.m_dts;
+  pkt->pts = frame.get_dts() + frame.get_composition_time();
+  pkt->dts = frame.get_dts();
   pkt->duration = rstatus->dts.val - pkt->dts;
   pkt->pos = sentry.sample_offset;
   // Hack style, optimize the memory algorithm
-  pkt->data = frame.m_dat;
-  pkt->size = frame.m_dat_len;
-  frame.m_dat = NULL;
+  pkt->data = frame.get_data();
+  pkt->size = frame.get_data_length();
+  frame.set_data(NULL);
 
 #ifdef XDEBUG
   LOGD("%s pkt->pts=%lld, pkt->dts=%lld (composition_time=%u), pkt->size=%d, pkt->duration: %d, current_sample#=%d, total samples#=%d",
        pkt->stream_index == AUDIO ? "AUDIO" : "VIDEO",
-       pkt->pts, pkt->dts, frame.m_composition_time, pkt->size, pkt->duration,
+       pkt->pts, pkt->dts, frame.get_composition_time(), pkt->size, pkt->duration,
        rstatus->sample_idx,
        trak->stsz->sample_count);
 #endif

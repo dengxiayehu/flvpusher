@@ -62,24 +62,25 @@ int MP4Pusher1::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 {
   MP4Pusher1 *obj = (MP4Pusher1 *) opaque;
   int ret = 0;
+  int dts = f->get_dts();
 
-  if (obj->frame_wait_done(&f->m_dts) < 0)
+  if (obj->frame_wait_done(&dts) < 0)
     return -1;
 
-  obj->on_frame(f->m_dts, f->m_dat, f->m_dat_len, is_video,
-                f->m_composition_time);
+  obj->on_frame(dts, f->get_data(), f->get_data_length(), is_video,
+                f->get_composition_time());
 
   if (is_video) {
-    if (obj->m_sink->send_video(f->m_dts,
-                                f->m_dat, f->m_dat_len,
-                                f->m_composition_time) < 0) {
+    if (obj->m_sink->send_video(dts,
+                                f->get_data(), f->get_data_length(),
+                                f->get_composition_time()) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;
     }
   } else {
-    if (obj->m_sink->send_audio(f->m_dts,
-                                f->m_dat, f->m_dat_len) < 0) {
+    if (obj->m_sink->send_audio(dts,
+                                f->get_data(), f->get_data_length()) < 0) {
       LOGE("Send audio data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;

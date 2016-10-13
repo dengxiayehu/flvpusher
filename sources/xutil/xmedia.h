@@ -20,12 +20,19 @@ const static byte nalu_startcode[] = {0, 0, 0, 1};
 class Frame {
 public:
   Frame();
+  ~Frame();
+
   int make_frame(int32_t ts, byte *dat, uint32_t dat_len,
                  bool reuse_dat, uint32_t composition_time = 0);
   void clear();
-  ~Frame();
+  const int32_t &get_dts() const { return m_dts; }
+  const uint32_t &get_composition_time() const { return m_composition_time; }
+  byte *get_data() const { return m_dat; }
+  const uint32_t &get_data_length() const { return m_dat_len; }
+  void set_data(byte *dat) { m_dat = dat; }
 
-public:
+private:
+  DISALLOW_COPY_AND_ASSIGN(Frame);
   int32_t m_dts;
   uint32_t m_composition_time;
   byte *m_dat;

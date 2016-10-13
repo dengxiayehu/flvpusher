@@ -21,8 +21,6 @@ public:
 
   TSParser *get_parser() const;
 
-  void set_timestamp_offset(int tm_offset);
-
 private:
   static int parsed_frame_cb(void *, xmedia::Frame *, int);
 
@@ -32,8 +30,6 @@ private:
 
 private:
   TSParser *m_parser;
-
-  int m_tm_offset;
 
   uint32_t m_width;
   uint32_t m_height;

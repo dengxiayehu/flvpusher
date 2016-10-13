@@ -16,7 +16,6 @@ namespace flvpusher {
 TSPusher::TSPusher(const std::string &input, MediaSink *&sink, bool hls_segment) :
   MediaPusher(input, sink),
   m_parser(NULL),
-  m_tm_offset(0),
   m_width(0), m_height(0),
   m_hls_segment(hls_segment)
 {
@@ -49,11 +48,6 @@ TSParser *TSPusher::get_parser() const
   return m_parser;
 }
 
-void TSPusher::set_timestamp_offset(int tm_offset)
-{
-  m_tm_offset = tm_offset;
-}
-
 int TSPusher::prepare()
 {
   if (init_parser() < 0) {
@@ -84,26 +78,25 @@ int TSPusher::parsed_frame_cb(void *opaque, Frame *f, int is_video)
 {
   TSPusher *obj = (TSPusher *) opaque;
   int ret = 0;
+  int dts = f->get_dts();
 
-  f->m_dts += obj->m_tm_offset;
-
-  if (obj->frame_wait_done(&f->m_dts) < 0)
+  if (obj->frame_wait_done(&dts) < 0)
     return -1;
 
-  obj->on_frame(f->m_dts, f->m_dat, f->m_dat_len, is_video,
-                f->m_composition_time);
+  obj->on_frame(dts, f->get_data(), f->get_data_length(), is_video,
+                f->get_composition_time());
 
   if (is_video) {
-    if (obj->m_sink->send_video(f->m_dts,
-                                f->m_dat, f->m_dat_len,
-                                f->m_composition_time) < 0) {
+    if (obj->m_sink->send_video(dts,
+                                f->get_data(), f->get_data_length(),
+                                f->get_composition_time()) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;
     }
   } else {
-    if (obj->m_sink->send_audio(f->m_dts,
-                                f->m_dat, f->m_dat_len) < 0) {
+    if (obj->m_sink->send_audio(dts,
+                                f->get_data(), f->get_data_length()) < 0) {
       LOGE("Send video data to %sserver failed",
            STR(obj->m_sink->type_str()));
       ret = -1;
