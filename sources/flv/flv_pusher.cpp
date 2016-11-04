@@ -52,7 +52,10 @@ int FLVPusher::loop()
     int32_t timestamp =
       (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
 
-    frame_wait_done(&timestamp);
+    // Do not wait flv metadata tag
+    if (tag->hdr.typ != FLVParser::TAG_SCRIPT) {
+      frame_wait_done(&timestamp);
+    }
 
     if (interrupt_cb()) {
       parser.free_tag(tag);
