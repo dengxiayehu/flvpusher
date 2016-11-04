@@ -1,0 +1,22 @@
+Based on WebRtc's git commit:
+===============================================================
+Author: Bjorn Volcker <bjornv@webrtc.org>
+Date:   Sun Jul 5 10:46:01 2015 +0200
+
+    audio_processing: Changed kMinDiffDelayMs from 50 to 60 ms
+    
+    The UMA histograms WebRTC.Audio.AecSystemDelayJump and WebRTC.Audio.PlatformReportedStreamDelayJump triggers if the jump is larger than kMinDiffD
+    Especially WebRTC.Audio.AecSystemDelayJump is sensitive around 50 ms differences, since the granularity is 4 ms and we can get a significant amou
+    Therefore, a change to 60 ms can make the logging more robust. The effect of not logging jumps in the interval 50-60 ms is of minor importance si
+    
+    Tested with a local ToT Chromium build where 52, 64 and 200 ms jumps were forced.
+    
+    BUG=488124
+    TBR=henrik.lundin@webrtc.org
+    
+    Review URL: https://codereview.webrtc.org/1208313003.
+    
+    Cr-Commit-Position: refs/heads/master@{#9540}
+===============================================================
+
+Currently store raw video(I420) and raw audio(pcm 16 44kHz) into files.
