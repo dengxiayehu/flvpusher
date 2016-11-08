@@ -80,9 +80,13 @@ int VideoTagStreamer::process(FLVParser::FLVTag &tag)
               nalu_type = (*it)->second[0]&0x1F;
 
             // Take these as I-frame's beginning
-            if (nalu_type==5/*IDR*/ || nalu_type==6/*SEI*/ ||
-                nalu_type==7/*SPS*/ || nalu_type==8/*PPS*/) {
+            if (nalu_type == 5 /*IDR*/ ||
+                nalu_type == 7 /*SPS*/ || nalu_type == 8 /*PPS*/) {
               key_frame = true;
+#ifdef XDEBUG
+              LOGD("KeyFrame detected, nalu type: %d, timestamp: %d",
+                   nalu_type, VALUI24(tag.hdr.timestamp));
+#endif
             }
           }
         }
