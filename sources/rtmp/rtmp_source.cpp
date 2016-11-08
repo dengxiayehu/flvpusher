@@ -187,6 +187,11 @@ int RtmpSource::loop()
         int32_t timestamp =
           (tag->hdr.timestamp_ext<<24) + VALUI24(tag->hdr.timestamp);
 
+        if (timestamp < 0 && m_info.tm_offset == 0) {
+            m_info.tm_offset = -timestamp;
+        }
+        timestamp += m_info.tm_offset;
+
         switch (tag->hdr.typ) {
           case FLVParser::TAG_VIDEO: {
             ++m_info.vrx;

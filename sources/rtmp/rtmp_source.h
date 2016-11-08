@@ -28,6 +28,7 @@ private:
     uint32_t channel;
     FPSCalc fps;
     BitrateCalc vBC, aBC;
+    int32_t tm_offset;
   };
 
 private:

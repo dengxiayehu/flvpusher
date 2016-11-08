@@ -3,7 +3,7 @@
 
 extern char abs_program[];
 
-#define VERSION_STR             "20161013.0.1"
+#define VERSION_STR             "20161108.0.1"
 
 #define INPUT_SEPARATOR         ","
 
