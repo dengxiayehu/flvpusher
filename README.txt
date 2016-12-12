@@ -65,5 +65,4 @@ note: a. webserver server's root directory is default to ./html
 
 Other
 ====================
-Any further information please contact me.
 mail: dengxiayehu@yeah.net
