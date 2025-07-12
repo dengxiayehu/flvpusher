@@ -9,17 +9,17 @@ class TagStreamerBase;
 
 class FLVPusher : public MediaPusher {
 public:
-  FLVPusher(const std::string &input, MediaSink *&sink);
-  virtual ~FLVPusher();
+    FLVPusher(const std::string& input, MediaSink*& sink);
+    virtual ~FLVPusher();
 
-  virtual int loop();
+    virtual int loop();
 
 private:
-  TagStreamerBase *m_vstrmer;
-  TagStreamerBase *m_astrmer;
-  TagStreamerBase *m_sstrmer;
+    TagStreamerBase* m_vstrmer;
+    TagStreamerBase* m_astrmer;
+    TagStreamerBase* m_sstrmer;
 };
 
-}
+}  // namespace flvpusher
 
 #endif /* end of _FLV_PUSHER_H_ */

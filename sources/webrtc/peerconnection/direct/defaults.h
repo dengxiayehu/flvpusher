@@ -14,4 +14,4 @@ extern const uint16 kDefaultServerPort;
 std::string GetPeerName();
 std::string GetPeerConnectionString();
 
-#endif // PEERCONNECTION_SAMPLES_DIRECT_DEFAULTS_H_
+#endif  // PEERCONNECTION_SAMPLES_DIRECT_DEFAULTS_H_
